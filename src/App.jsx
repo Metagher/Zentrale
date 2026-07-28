@@ -1608,7 +1608,8 @@ function AppInner() {
 
   return (
     <div style={{ '--accent': user.accent, '--accent-ring': user.ring }} className="min-h-screen bg-zinc-950">
-      <header className="sticky top-0 z-30 bg-zinc-900/90 backdrop-blur border-b border-zinc-800">
+      <header className="sticky top-0 z-30 bg-zinc-900/90 backdrop-blur border-b border-zinc-800"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-5xl mx-auto px-4 md:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center">
