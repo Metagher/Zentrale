@@ -5,3 +5,12 @@
 html, body, #root {
   height: 100%;
 }
+
+/* iOS Safari zoomt beim Fokussieren automatisch in Formularfelder mit weniger
+   als 16px Schriftgröße hinein. Auf schmalen Bildschirmen (unter dem md-Breakpoint,
+   der auch sonst mobil/desktop trennt) erzwingen wir daher 16px. */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
