@@ -1566,18 +1566,40 @@ function AppInner() {
   }
   function editTaskDef(data) {
     const { isCleaning, ...rest } = data;
+    const prev = taskDefs.find(d => d.id === rest.id);
+    const patternChanged = prev && (
+      prev.recurType !== rest.recurType ||
+      prev.startDate !== rest.startDate ||
+      JSON.stringify(prev.daysOfWeek || []) !== JSON.stringify(rest.daysOfWeek || [])
+    );
+    const today = todayISO();
+
+    let nextInstances;
+    if (patternChanged && rest.recurType !== 'once') {
+      // Die Wiederholungsregel selbst hat sich geändert: noch nicht vergangene und
+      // noch nicht erledigte Termine dieser Aufgabe werden verworfen und anhand der
+      // neuen Regel neu erzeugt. Vergangene und bereits erledigte Termine bleiben
+      // unangetastet (keine rückwirkende Änderung historischer Daten).
+      const kept = instances.filter(i => !(i.defId === rest.id && i.dueDate >= today && !i.completed));
+      const through = addDays(today, rollWindowFor(rest.recurType));
+      const existingDates = new Set(kept.filter(i => i.defId === rest.id).map(i => i.dueDate));
+      const fresh = generateInstancesForDef(rest, today, through).filter(inst => !existingDates.has(inst.dueDate));
+      nextInstances = [...kept, ...fresh];
+      rest.generatedThrough = through;
+    } else {
+      // Nur Titel/Raum auf bereits erzeugte, noch nicht vergangene Termine übertragen.
+      nextInstances = instances.map(i =>
+        (i.defId === rest.id && i.dueDate >= today) ? { ...i, title: rest.title, roomId: rest.roomId } : i
+      );
+    }
+
     persistDefs(taskDefs.map(d => d.id === rest.id ? { ...d, ...rest } : d));
     persistRooms(rooms.map(r => {
       if (isCleaning && r.id === rest.roomId) return { ...r, cleaningDefId: rest.id };
       if (r.cleaningDefId === rest.id && (!isCleaning || r.id !== rest.roomId)) return { ...r, cleaningDefId: null };
       return r;
     }));
-    // Titel/Raum auf bereits erzeugte, aber noch nicht vergangene Termine übertragen.
-    // Historische (vergangene) Termine bleiben unangetastet.
-    const today = todayISO();
-    persistInstances(instances.map(i =>
-      (i.defId === rest.id && i.dueDate >= today) ? { ...i, title: rest.title, roomId: rest.roomId } : i
-    ));
+    persistInstances(nextInstances);
   }
 
   function createInstanceFromTemplate(def, dueDate) {
