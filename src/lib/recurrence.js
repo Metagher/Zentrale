@@ -1,4 +1,5 @@
 import { WEEKDAYS_SHORT, addDays, dowSunFirst, formatDate } from './dateUtils.js';
+import { isDateInVacation } from './vacation.js';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
@@ -21,7 +22,10 @@ export function recurrenceLabel(def) {
   return '';
 }
 
-export function generateInstancesForDef(def, fromDate, throughDate) {
+// vacations wird nur für wiederkehrende Serien angewendet (automatische Terminplanung).
+// Einmalige Aufgaben, die eine Person bewusst manuell anlegt (z. B. über "Heute"/
+// "Morgen" bei einer Vorlage), sind davon absichtlich ausgenommen.
+export function generateInstancesForDef(def, fromDate, throughDate, vacations = []) {
   const out = [];
   if (def.recurType === 'once') {
     if (def.startDate >= fromDate && def.startDate <= throughDate) {
@@ -40,7 +44,7 @@ export function generateInstancesForDef(def, fromDate, throughDate) {
       const startDay = new Date(def.startDate + 'T00:00:00').getDate();
       matches = new Date(cursor + 'T00:00:00').getDate() === startDay;
     }
-    if (matches) out.push(makeInstance(def, cursor));
+    if (matches && !isDateInVacation(cursor, vacations)) out.push(makeInstance(def, cursor));
     cursor = addDays(cursor, 1);
   }
   return out;
@@ -68,7 +72,7 @@ export function rollWindowFor(recurType) {
   return recurType === 'weekly' ? WEEKLY_ROLL_DAYS : ROLL_DAYS;
 }
 
-export function extendRecurringInstances(defs, instances, today) {
+export function extendRecurringInstances(defs, instances, today, vacations = []) {
   let list = [...instances];
   const newDefs = defs.map(def => {
     if (def.recurType === 'once') return def;
@@ -77,7 +81,7 @@ export function extendRecurringInstances(defs, instances, today) {
     if (genThrough >= targetThrough) return def;
     const from = addDays(genThrough, 1);
     const existingKeys = new Set(list.filter(i => i.defId === def.id).map(i => i.dueDate));
-    const added = generateInstancesForDef(def, from, targetThrough).filter(a => !existingKeys.has(a.dueDate));
+    const added = generateInstancesForDef(def, from, targetThrough, vacations).filter(a => !existingKeys.has(a.dueDate));
     list = list.concat(added);
     return { ...def, generatedThrough: targetThrough };
   });

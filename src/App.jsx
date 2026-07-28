@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Home, LogOut, RefreshCw } from 'lucide-react';
+import { Home, LogOut, Palmtree, RefreshCw } from 'lucide-react';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
 import { USERS, NAV_ITEMS } from './constants.js';
@@ -8,9 +8,11 @@ import { extendRecurringInstances, generateInstancesForDef, makeInstance, rollWi
 import { loadKey, saveKey } from './lib/storage.js';
 import { guard } from './lib/guard.js';
 import { DRYER_TASK_DEF_ID, DRYER_TASK_TITLE_DEFAULT, LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey, resolveDryerTaskRoomId } from './lib/laundry.js';
+import { suppressVacationInstances } from './lib/vacation.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
 import { AccentButton, Field, GhostButton, Modal, inputCls } from './components/ui.jsx';
+import { VacationModal } from './components/VacationModal.jsx';
 import { OverviewView } from './views/OverviewView.jsx';
 import { CalendarView } from './views/CalendarView.jsx';
 import { RoomsView } from './views/RoomsView.jsx';
@@ -30,6 +32,8 @@ function AppInner() {
   const [instances, setInstances] = useState([]);
   const [laundry, setLaundry] = useState({ waschmaschine: LAUNDRY_DEFAULT, trockner: LAUNDRY_DEFAULT });
   const [shopping, setShopping] = useState([]);
+  const [vacations, setVacations] = useState([]);
+  const [showVacation, setShowVacation] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -108,9 +112,12 @@ function AppInner() {
       i = i.map(inst => inst.defId ? inst : { ...inst, defId: firstRepairedDefId });
     }
 
+    const v = await loadKey(supabase, 'vacations', []);
+
     const today = todayISO();
     i = i.map(inst => (!inst.completed && inst.dueDate < today) ? { ...inst, dueDate: today } : inst);
-    const ext = extendRecurringInstances(d, i, today);
+    const ext = extendRecurringInstances(d, i, today, v);
+    const cleanedInstances = suppressVacationInstances(ext.instances, v);
 
     let l = await loadKey(supabase, 'laundry', null);
     if (!l || typeof l !== 'object') l = {};
@@ -124,13 +131,14 @@ function AppInner() {
 
     setRooms(r);
     setTaskDefs(ext.defs);
-    setInstances(ext.instances);
+    setInstances(cleanedInstances);
     setLaundry(l);
     setShopping(s);
+    setVacations(v);
     setReady(true);
     saveKey(supabase, 'rooms', r);
     saveKey(supabase, 'taskDefs', ext.defs);
-    saveKey(supabase, 'instances', ext.instances);
+    saveKey(supabase, 'instances', cleanedInstances);
   }
 
   async function refresh() {
@@ -179,12 +187,23 @@ function AppInner() {
   function persistRooms(next) { setRooms(next); saveKey(supabase, 'rooms', next); }
   function persistDefs(next) { setTaskDefs(next); saveKey(supabase, 'taskDefs', next); }
   function persistInstances(next) { setInstances(next); saveKey(supabase, 'instances', next); }
+  function persistVacations(next) { setVacations(next); saveKey(supabase, 'vacations', next); }
+
+  function addVacation({ start, end }) {
+    const next = [...vacations, { id: uid(), start, end }];
+    persistVacations(next);
+    const cleaned = suppressVacationInstances(instances, next);
+    if (cleaned.length !== instances.length) persistInstances(cleaned);
+  }
+  function deleteVacation(id) {
+    persistVacations(vacations.filter(v => v.id !== id));
+  }
 
   function addTaskDef(data) {
     const { isCleaning, ...rest } = data;
     const def = { ...rest, id: uid(), generatedThrough: null };
     const through = def.recurType === 'once' ? def.startDate : addDays(todayISO(), rollWindowFor(def.recurType));
-    const newInstances = generateInstancesForDef(def, def.startDate, through);
+    const newInstances = generateInstancesForDef(def, def.startDate, through, vacations);
     def.generatedThrough = through;
     persistDefs([...taskDefs, def]);
     persistInstances([...instances, ...newInstances]);
@@ -211,7 +230,7 @@ function AppInner() {
       const kept = instances.filter(i => !(i.defId === rest.id && i.dueDate >= today && !i.completed));
       const through = addDays(today, rollWindowFor(rest.recurType));
       const existingDates = new Set(kept.filter(i => i.defId === rest.id).map(i => i.dueDate));
-      const fresh = generateInstancesForDef(rest, today, through).filter(inst => !existingDates.has(inst.dueDate));
+      const fresh = generateInstancesForDef(rest, today, through, vacations).filter(inst => !existingDates.has(inst.dueDate));
       nextInstances = [...kept, ...fresh];
       rest.generatedThrough = through;
     } else {
@@ -309,6 +328,10 @@ function AppInner() {
               </span>
               <span className="text-xs font-medium" style={{ color: user.accent }}>{user.name}</span>
             </div>
+            <button onClick={() => setShowVacation(true)} title="Urlaub"
+              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500">
+              <Palmtree size={16} />
+            </button>
             <button onClick={refresh} disabled={refreshing} title="Aktualisieren"
               className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 disabled:opacity-50">
               <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
@@ -388,6 +411,10 @@ function AppInner() {
 
       {quickAddDate && (
         <QuickAddModal date={quickAddDate} rooms={rooms} onCancel={() => setQuickAddDate(null)} onSave={guard(quickAdd, 'Aufgabe anlegen')} />
+      )}
+      {showVacation && (
+        <VacationModal vacations={vacations} onAdd={guard(addVacation, 'Urlaub hinzufügen')} onDelete={guard(deleteVacation, 'Urlaub löschen')}
+          onClose={() => setShowVacation(false)} />
       )}
     </div>
   );
