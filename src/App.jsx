@@ -822,7 +822,7 @@ function RoomDetail({ room, last, cleaning, openCount, onClose, onSave, onDelete
 function TaskDefForm({ initial, rooms, onCancel, onSave }) {
   const [f, setF] = useState(initial || {
     title: '', roomId: rooms[0]?.id || '',
-    recurType: 'once', startDate: todayISO(), daysOfWeek: [1],
+    recurType: 'once', startDate: todayISO(), daysOfWeek: [1], isTemplate: false,
   });
   const [isCleaning, setIsCleaning] = useState(() => {
     if (!initial) return false;
@@ -877,6 +877,18 @@ function TaskDefForm({ initial, rooms, onCancel, onSave }) {
           Diese Aufgabe bzw. Serie als Reinigung des Raums markieren (für "Zuletzt geputzt")
         </span>
       </button>
+      {f.recurType === 'once' && (
+        <button type="button" onClick={() => setF(v => ({ ...v, isTemplate: !v.isTemplate }))}
+          className="w-full flex items-center gap-2.5 rounded-lg border border-zinc-800 px-3 py-2.5 mb-2 text-left">
+          <span className="w-4 h-4 rounded flex items-center justify-center shrink-0 border"
+            style={{ backgroundColor: f.isTemplate ? 'var(--accent)' : 'transparent', borderColor: f.isTemplate ? 'var(--accent)' : '#52525b' }}>
+            {f.isTemplate && <Check size={12} className="text-white" />}
+          </span>
+          <span className="text-xs text-zinc-200">
+            Als Vorlage auf der Aufgabenseite behalten (mit Schnellzugriff "Heute"/"Morgen")
+          </span>
+        </button>
+      )}
       <div className="flex gap-2 justify-end mt-2">
         <GhostButton onClick={onCancel}>Abbrechen</GhostButton>
         <AccentButton disabled={!f.title.trim() || !f.roomId} onClick={() => onSave({ id: initial?.id, ...f, isCleaning })}>Speichern</AccentButton>
@@ -885,28 +897,30 @@ function TaskDefForm({ initial, rooms, onCancel, onSave }) {
   );
 }
 
-function TasksView({ taskDefs, rooms, onAddDef, onEditDef, onDeleteDef }) {
+function TasksView({ taskDefs, rooms, onAddDef, onEditDef, onDeleteDef, onCreateFromTemplate }) {
   const [form, setForm] = useState(null); // null | 'new' | def object
   const roomsById = Object.fromEntries(rooms.map(r => [r.id, r]));
+  const visibleDefs = taskDefs.filter(def => def.recurType !== 'once' || def.isTemplate);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-semibold text-zinc-50">Aufgaben</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Vorlagen für einmalige und wiederkehrende Aufgaben</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Wiederkehrende Aufgaben und Vorlagen für einmalige Aufgaben</p>
         </div>
         <AccentButton small disabled={rooms.length === 0} onClick={() => setForm('new')}><Plus size={14} /> Aufgabe</AccentButton>
       </div>
 
       {rooms.length === 0 ? (
         <EmptyState text="Lege zuerst mindestens einen Raum an." />
-      ) : taskDefs.length === 0 ? (
-        <EmptyState text="Noch keine Aufgaben definiert." action={{ label: 'Erste Aufgabe anlegen', onClick: () => setForm('new') }} />
+      ) : visibleDefs.length === 0 ? (
+        <EmptyState text="Noch keine wiederkehrenden Aufgaben oder Vorlagen definiert." action={{ label: 'Erste Aufgabe anlegen', onClick: () => setForm('new') }} />
       ) : (
         <div className="space-y-2">
-          {taskDefs.map(def => {
+          {visibleDefs.map(def => {
             const isCleaning = roomsById[def.roomId]?.cleaningDefId === def.id;
+            const isOnceTemplate = def.recurType === 'once';
             return (
               <div key={def.id} className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -916,11 +930,17 @@ function TasksView({ taskDefs, rooms, onAddDef, onEditDef, onDeleteDef }) {
                   </div>
                   <div className="text-xs text-zinc-500 mt-0.5 flex items-center gap-2 flex-wrap">
                     <span className="flex items-center gap-1"><MapPin size={11} /> {roomsById[def.roomId]?.name || '–'}</span>
-                    <span>{recurrenceLabel(def)}</span>
+                    <span>{isOnceTemplate ? 'Vorlage' : recurrenceLabel(def)}</span>
                     {isCleaning && <span style={{ color: 'var(--accent)' }}>Reinigung</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  {isOnceTemplate && (
+                    <>
+                      <GhostButton small onClick={() => onCreateFromTemplate(def, todayISO())}>Heute</GhostButton>
+                      <GhostButton small onClick={() => onCreateFromTemplate(def, addDays(todayISO(), 1))}>Morgen</GhostButton>
+                    </>
+                  )}
                   <button onClick={() => setForm(def)} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500"><Pencil size={14} /></button>
                   <button onClick={() => onDeleteDef(def)} className="p-1.5 rounded-lg hover:bg-red-950 text-zinc-600 hover:text-red-400"><Trash2 size={14} /></button>
                 </div>
@@ -1552,6 +1572,16 @@ function AppInner() {
       if (r.cleaningDefId === rest.id && (!isCleaning || r.id !== rest.roomId)) return { ...r, cleaningDefId: null };
       return r;
     }));
+    // Titel/Raum auf bereits erzeugte, aber noch nicht vergangene Termine übertragen.
+    // Historische (vergangene) Termine bleiben unangetastet.
+    const today = todayISO();
+    persistInstances(instances.map(i =>
+      (i.defId === rest.id && i.dueDate >= today) ? { ...i, title: rest.title, roomId: rest.roomId } : i
+    ));
+  }
+
+  function createInstanceFromTemplate(def, dueDate) {
+    persistInstances([...instances, makeInstance(def, dueDate)]);
   }
   function deleteTaskDef(def) {
     if (!window.confirm(`Aufgabe "${def.title}" inklusive zukünftiger offener Termine löschen?`)) return;
@@ -1669,7 +1699,8 @@ function AppInner() {
             <RoomsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')} />
           )}
           {view === 'tasks' && (
-            <TasksView taskDefs={taskDefs} rooms={rooms} onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')} />
+            <TasksView taskDefs={taskDefs} rooms={rooms} onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
+              onCreateFromTemplate={guard(createInstanceFromTemplate, 'Aufgabe erstellen')} />
           )}
           {view === 'reports' && (
             <ReportsView rooms={rooms} instances={instances} laundry={laundry} />
