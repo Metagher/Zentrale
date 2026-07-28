@@ -78,6 +78,11 @@ function formatDateTime(iso) {
     d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
+function byOpenFirstThenTitle(a, b) {
+  if (a.completed !== b.completed) return a.completed ? 1 : -1;
+  return a.title.localeCompare(b.title);
+}
+
 function recurrenceLabel(def) {
   if (def.recurType === 'once') return `Einmalig, ${formatDate(def.startDate)}`;
   if (def.recurType === 'daily') return 'Täglich';
@@ -503,7 +508,7 @@ function DayByRoom({ date, instances, roomsById, rooms, user, onUpdate, onDelete
             {roomsById[rid]?.name || 'Ohne Raum'}
           </div>
           <div className="space-y-2">
-            {grouped[rid].sort((a, b) => a.title.localeCompare(b.title)).map(inst => (
+            {grouped[rid].sort(byOpenFirstThenTitle).map(inst => (
               <TaskCard key={inst.id} instance={inst} room={roomsById[inst.roomId]} rooms={rooms} user={user}
                 onUpdate={onUpdate} onDelete={onDelete} />
             ))}
@@ -522,7 +527,7 @@ function WeekList({ start, instances, roomsById, rooms, user, onUpdate, onDelete
   return (
     <div className="space-y-6">
       {days.map(d => {
-        const items = instances.filter(i => i.dueDate === d).sort((a, b) => a.title.localeCompare(b.title));
+        const items = instances.filter(i => i.dueDate === d).sort(byOpenFirstThenTitle);
         return (
           <div key={d}>
             <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
