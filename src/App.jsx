@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Home, Calendar, LayoutGrid, ListChecks, BarChart3, Check, Plus, X,
   ChevronLeft, ChevronRight, LogOut, MessageSquare, Trash2,
-  Pencil, Undo2, MapPin, Sparkles, WashingMachine, Fan, ShoppingCart
+  Pencil, Undo2, MapPin, Sparkles, WashingMachine, Fan, ShoppingCart, RefreshCw
 } from 'lucide-react';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
@@ -1390,8 +1390,14 @@ function AppInner() {
   const [shopping, setShopping] = useState([]);
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => { if (supabase) load(); }, [supabase]);
+  useEffect(() => {
+    if (!supabase || !userName) return;
+    const id = setInterval(() => { load(); }, 30000);
+    return () => clearInterval(id);
+  }, [supabase, userName]);
   useEffect(() => {
     const onError = (e) => {
       console.error('Unerwarteter Fehler:', e.error || e.message);
@@ -1482,6 +1488,15 @@ function AppInner() {
     saveKey(supabase, 'rooms', r);
     saveKey(supabase, 'taskDefs', ext.defs);
     saveKey(supabase, 'instances', ext.instances);
+  }
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   function persistLaundry(next) { setLaundry(next); saveKey(supabase, 'laundry', next); }
@@ -1608,6 +1623,10 @@ function AppInner() {
               </span>
               <span className="text-xs font-medium" style={{ color: user.accent }}>{user.name}</span>
             </div>
+            <button onClick={refresh} disabled={refreshing} title="Aktualisieren"
+              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 disabled:opacity-50">
+              <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            </button>
             <button onClick={() => setUserName(null)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500">
               <LogOut size={16} />
             </button>
