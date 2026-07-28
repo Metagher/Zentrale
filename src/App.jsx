@@ -7,7 +7,7 @@ import { addDays, formatDate, todayISO } from './lib/dateUtils.js';
 import { extendRecurringInstances, generateInstancesForDef, makeInstance, rollWindowFor, uid } from './lib/recurrence.js';
 import { loadKey, saveKey } from './lib/storage.js';
 import { guard } from './lib/guard.js';
-import { LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey } from './lib/laundry.js';
+import { DRYER_TASK_DEF_ID, DRYER_TASK_TITLE_DEFAULT, LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey, resolveDryerTaskRoomId } from './lib/laundry.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
 import { AccentButton, Field, GhostButton, Modal, inputCls } from './components/ui.jsx';
@@ -117,6 +117,7 @@ function AppInner() {
     l = {
       waschmaschine: { ...LAUNDRY_DEFAULT, ...(l.waschmaschine || {}), counts: { ...(l.waschmaschine?.counts || {}) } },
       trockner: { ...LAUNDRY_DEFAULT, ...(l.trockner || {}), counts: { ...(l.trockner?.counts || {}) } },
+      dryerTask: l.dryerTask || { title: DRYER_TASK_TITLE_DEFAULT, roomId: '' },
     };
 
     const s = await loadKey(supabase, 'shopping', []);
@@ -156,6 +157,16 @@ function AppInner() {
       [machine]: { status: nextStatus, changedBy: user.name, changedAt: new Date().toISOString(), counts },
     };
     persistLaundry(next);
+    if (machine === 'trockner' && nextStatus === 'FERTIG' && laundry.dryerTask?.title) {
+      const roomId = resolveDryerTaskRoomId(laundry.dryerTask, rooms);
+      if (roomId) {
+        const dryerDef = { id: DRYER_TASK_DEF_ID, title: laundry.dryerTask.title, roomId };
+        persistInstances([...instances, makeInstance(dryerDef, todayISO())]);
+      }
+    }
+  }
+  function saveDryerTask(data) {
+    persistLaundry({ ...laundry, dryerTask: { title: data.title.trim(), roomId: data.roomId } });
   }
   function adjustLaundryCount(machine, delta) {
     const current = laundry[machine] || LAUNDRY_DEFAULT;
@@ -345,7 +356,8 @@ function AppInner() {
             <ReportsView rooms={rooms} instances={instances} laundry={laundry} />
           )}
           {view === 'laundry' && (
-            <LaundryView laundry={laundry} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')} user={user} />
+            <LaundryView laundry={laundry} rooms={rooms} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')}
+              onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')} user={user} />
           )}
           {view === 'shopping' && (
             <ShoppingView items={shopping}
