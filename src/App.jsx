@@ -245,7 +245,11 @@ function AppInner() {
     const { isCleaning, ...rest } = data;
     const def = { ...rest, id: uid(), generatedThrough: null };
     const through = def.recurType === 'once' ? def.startDate : addDays(todayISO(), rollWindowFor(def.recurType));
-    const newInstances = generateInstancesForDef(def, def.startDate, through, vacations);
+    // Einmalige Vorlagen erzeugen bewusst keinen Termin beim Anlegen - Termine
+    // entstehen dafür ausschließlich über die "Heute"/"Morgen"-Buttons. Sonst
+    // gäbe es sofort einen zusätzlichen, unerwünschten Termin am Erstelldatum.
+    const skipInitialInstance = def.recurType === 'once' && def.isTemplate;
+    const newInstances = skipInitialInstance ? [] : generateInstancesForDef(def, def.startDate, through, vacations);
     def.generatedThrough = through;
     persistDefs([...taskDefs, def]);
     persistInstances([...instances, ...newInstances]);
