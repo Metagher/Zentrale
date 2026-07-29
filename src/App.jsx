@@ -11,7 +11,7 @@ import { DRYER_TASK_DEF_ID, DRYER_TASK_TITLE_DEFAULT, LAUNDRY_DEFAULT, LAUNDRY_S
 import { suppressVacationInstances } from './lib/vacation.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
-import { AccentButton, Field, GhostButton, Modal, inputCls } from './components/ui.jsx';
+import { AccentButton, Field, GhostButton, Modal, Toast, inputCls } from './components/ui.jsx';
 import { OverviewView } from './views/OverviewView.jsx';
 import { CalendarView } from './views/CalendarView.jsx';
 import { TasksView } from './views/TasksView.jsx';
@@ -38,6 +38,13 @@ function AppInner() {
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => { if (supabase) load(); }, [supabase]);
   useEffect(() => {
@@ -177,6 +184,8 @@ function AppInner() {
       if (roomId) {
         const dryerDef = { id: DRYER_TASK_DEF_ID, title: laundry.dryerTask.title, roomId };
         persistInstances([...instances, makeInstance(dryerDef, todayISO())]);
+        const roomName = rooms.find(r => r.id === roomId)?.name;
+        setToast(`Automatische Aufgabe erstellt: „${laundry.dryerTask.title}“${roomName ? ` (${roomName})` : ''}`);
       }
     }
   }
@@ -446,6 +455,7 @@ function AppInner() {
       {quickAddDate && (
         <QuickAddModal date={quickAddDate} rooms={rooms} onCancel={() => setQuickAddDate(null)} onSave={guard(quickAdd, 'Aufgabe anlegen')} />
       )}
+      <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

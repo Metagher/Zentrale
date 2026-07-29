@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 
 export function Modal({ title, onClose, children, wide }) {
   return (
@@ -66,6 +66,21 @@ export function EmptyState({ text, action }) {
           {action.label}
         </button>
       )}
+    </div>
+  );
+}
+
+export function Toast({ message, onClose }) {
+  if (!message) return null;
+  return (
+    <div className="fixed inset-x-0 bottom-20 md:bottom-6 z-40 flex justify-center px-4 pointer-events-none">
+      <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl bg-zinc-900 border border-zinc-700 shadow-lg px-4 py-3 max-w-sm">
+        <Sparkles size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
+        <span className="text-sm text-zinc-100">{message}</span>
+        <button onClick={onClose} className="shrink-0 p-1 rounded-full hover:bg-zinc-800 text-zinc-500">
+          <X size={14} />
+        </button>
+      </div>
     </div>
   );
 }
