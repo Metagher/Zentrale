@@ -1,11 +1,39 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { addDays, dowSunFirst, formatDate, todayISO, weekStart, WEEKDAYS_FULL } from '../lib/dateUtils.js';
 import { byOpenFirstThenTitle } from '../lib/recurrence.js';
-import { EmptyState, ToggleSwitch, inputCls } from '../components/ui.jsx';
+import { ACTIVITY_TYPES } from '../constants.js';
+import { EmptyState, GhostButton, ToggleSwitch, inputCls } from '../components/ui.jsx';
 import { TaskCard } from '../components/TaskCard.jsx';
 
-export function OverviewView({ instances, rooms, user, onlyMine, setOnlyMine, onUpdate, onDelete, onQuickAdd }) {
+function HouseholdCounters({ onLog }) {
+  const [justLogged, setJustLogged] = useState(null);
+
+  function handleClick(type) {
+    onLog(type);
+    setJustLogged(type);
+    setTimeout(() => setJustLogged(v => (v === type ? null : v)), 1200);
+  }
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 mb-4">
+      <div className="text-xs text-zinc-500 mb-2">Schnell erfassen</div>
+      <div className="flex flex-wrap gap-2">
+        {ACTIVITY_TYPES.map(activity => {
+          const Icon = activity.icon;
+          const done = justLogged === activity.id;
+          return (
+            <GhostButton key={activity.id} small onClick={() => handleClick(activity.id)}>
+              {done ? <Check size={13} /> : <Icon size={13} />} {activity.label}
+            </GhostButton>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function OverviewView({ instances, rooms, user, onlyMine, setOnlyMine, onUpdate, onDelete, onQuickAdd, onLogActivity }) {
   const [mode, setMode] = useState('day');
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [roomFilter, setRoomFilter] = useState('all');
@@ -48,6 +76,8 @@ export function OverviewView({ instances, rooms, user, onlyMine, setOnlyMine, on
           </select>
         </div>
       </div>
+
+      <HouseholdCounters onLog={onLogActivity} />
 
       <div className="flex items-center justify-between mb-4">
         <button onClick={() => shift(-1)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400"><ChevronLeft size={18} /></button>

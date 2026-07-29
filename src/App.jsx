@@ -32,6 +32,7 @@ function AppInner() {
   const [laundry, setLaundry] = useState({ waschmaschine: LAUNDRY_DEFAULT, trockner: LAUNDRY_DEFAULT });
   const [shopping, setShopping] = useState([]);
   const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
+  const [activities, setActivities] = useState([]);
   const [vacations, setVacations] = useState([]);
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
@@ -128,6 +129,7 @@ function AppInner() {
 
     const s = await loadKey(supabase, 'shopping', []);
     const b = await loadKey(supabase, 'balance', { amount: null, updatedBy: null, updatedAt: null });
+    const act = await loadKey(supabase, 'activities', []);
 
     setRooms(r);
     setTaskDefs(ext.defs);
@@ -135,6 +137,7 @@ function AppInner() {
     setLaundry(l);
     setShopping(s);
     setBalance(b);
+    setActivities(act);
     setVacations(v);
     setReady(true);
     saveKey(supabase, 'rooms', r);
@@ -293,6 +296,13 @@ function AppInner() {
     saveKey(supabase, 'balance', next);
   }
 
+  function logActivity(type) {
+    const event = { id: uid(), type, user: user.name, ts: new Date().toISOString() };
+    const next = [...activities, event];
+    setActivities(next);
+    saveKey(supabase, 'activities', next);
+  }
+
   function quickAdd(title, roomId, dueDate) {
     const def = { id: uid(), title, roomId, recurType: 'once', startDate: dueDate, generatedThrough: dueDate };
     persistDefs([...taskDefs, def]);
@@ -365,7 +375,8 @@ function AppInner() {
         <main className="flex-1 px-4 md:px-8 py-6 pb-24 md:pb-10 min-w-0">
           {view === 'overview' && (
             <OverviewView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
-              onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate} />
+              onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate}
+              onLogActivity={guard(logActivity, 'Aktivität erfassen')} />
           )}
           {view === 'calendar' && (
             <CalendarView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
@@ -376,7 +387,7 @@ function AppInner() {
               onCreateFromTemplate={guard(createInstanceFromTemplate, 'Aufgabe erstellen')} />
           )}
           {view === 'reports' && (
-            <ReportsView rooms={rooms} instances={instances} laundry={laundry} />
+            <ReportsView rooms={rooms} instances={instances} laundry={laundry} activities={activities} />
           )}
           {view === 'laundry' && (
             <LaundryView laundry={laundry} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')} />

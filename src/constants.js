@@ -1,11 +1,18 @@
 import {
   Home, Calendar, ListChecks, BarChart3, WashingMachine, ShoppingCart, Settings,
+  ArrowDownToLine, ArrowUpFromLine, ChefHat,
 } from 'lucide-react';
 
 export const USERS = {
   Fabian: { name: 'Fabian', accent: '#2563eb', light: '#eff6ff', soft: '#dbeafe', ring: '#bfdbfe' },
   Marie:  { name: 'Marie',  accent: '#db2777', light: '#fdf2f8', soft: '#fce7f3', ring: '#fbcfe8' },
 };
+
+export const ACTIVITY_TYPES = [
+  { id: 'dishwasher_in', label: 'Spülmaschine einräumen', icon: ArrowDownToLine },
+  { id: 'dishwasher_out', label: 'Spülmaschine ausräumen', icon: ArrowUpFromLine },
+  { id: 'cooking', label: 'Kochen', icon: ChefHat },
+];
 
 export const NAV_ITEMS = [
   { id: 'overview', label: 'Übersicht', icon: Home },
