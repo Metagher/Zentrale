@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Home, LogOut, RefreshCw } from 'lucide-react';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
@@ -39,6 +39,11 @@ function AppInner() {
   const [onlyMine, setOnlyMine] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const instancesRef = useRef(instances);
+  const userNameRef = useRef(userName);
+
+  useEffect(() => { instancesRef.current = instances; }, [instances]);
+  useEffect(() => { userNameRef.current = userName; }, [userName]);
 
   useEffect(() => {
     if (!toast) return;
@@ -126,6 +131,27 @@ function AppInner() {
     i = i.map(inst => (!inst.completed && inst.dueDate < today) ? { ...inst, dueDate: today } : inst);
     const ext = extendRecurringInstances(d, i, today, v);
     const cleanedInstances = suppressVacationInstances(ext.instances, v);
+
+    // Neue Kommentare der jeweils anderen Person kurz als Toast anzeigen.
+    // Nur relevant, wenn schon eingeloggt - der allererste Load (vor dem Login)
+    // würde sonst jeden bestehenden Kommentar fälschlich als "neu" melden.
+    if (userNameRef.current) {
+      const seen = new Set();
+      instancesRef.current.forEach(inst => {
+        (inst.comments || []).forEach(c => seen.add(`${inst.id}|${c.ts}|${c.user}`));
+      });
+      let latestNew = null;
+      cleanedInstances.forEach(inst => {
+        (inst.comments || []).forEach(c => {
+          if (c.user === userNameRef.current) return;
+          if (seen.has(`${inst.id}|${c.ts}|${c.user}`)) return;
+          if (!latestNew || c.ts > latestNew.ts) latestNew = { ...c, taskTitle: inst.title };
+        });
+      });
+      if (latestNew) {
+        setToast(`Neuer Kommentar von ${latestNew.user} bei „${latestNew.taskTitle}“`);
+      }
+    }
 
     let l = await loadKey(supabase, 'laundry', null);
     if (!l || typeof l !== 'object') l = {};
