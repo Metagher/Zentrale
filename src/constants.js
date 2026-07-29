@@ -1,6 +1,5 @@
 import {
   Home, Calendar, ListChecks, BarChart3, WashingMachine, ShoppingCart, Settings,
-  ArrowDownToLine, ArrowUpFromLine, ChefHat,
 } from 'lucide-react';
 
 export const USERS = {
@@ -8,10 +7,13 @@ export const USERS = {
   Marie:  { name: 'Marie',  accent: '#db2777', light: '#fdf2f8', soft: '#fce7f3', ring: '#fbcfe8' },
 };
 
-export const ACTIVITY_TYPES = [
-  { id: 'dishwasher_in', label: 'Spülmaschine einräumen', icon: ArrowDownToLine },
-  { id: 'dishwasher_out', label: 'Spülmaschine ausräumen', icon: ArrowUpFromLine },
-  { id: 'cooking', label: 'Kochen', icon: ChefHat },
+// Startbelegung für die Schnellerfassungs-Aktivitäten (Waschstatus-Seite -> Übersicht).
+// Nutzer können darüber hinaus eigene Aktivitäten unter Einstellungen anlegen/löschen;
+// die tatsächlich aktive Liste liegt dann im 'activityTypes'-KV-Eintrag.
+export const DEFAULT_ACTIVITY_TYPES = [
+  { id: 'dishwasher_in', label: 'Spülmaschine einräumen' },
+  { id: 'dishwasher_out', label: 'Spülmaschine ausräumen' },
+  { id: 'cooking', label: 'Kochen' },
 ];
 
 export const NAV_ITEMS = [

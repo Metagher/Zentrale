@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Fan, Sparkles, WashingMachine } from 'lucide-react';
-import { ACTIVITY_TYPES, USERS } from '../constants.js';
+import { Fan, Sparkles, WashingMachine, Zap } from 'lucide-react';
+import { USERS } from '../constants.js';
 import { formatDate, todayISO, weekStart } from '../lib/dateUtils.js';
 import { monthLabel } from '../lib/laundry.js';
 import { EmptyState, Modal } from '../components/ui.jsx';
 
-export function ReportsView({ rooms, instances, laundry, activities }) {
+export function ReportsView({ rooms, instances, laundry, activities, activityTypes }) {
   const [tab, setTab] = useState('rooms');
   const [detailMachine, setDetailMachine] = useState(null);
 
@@ -32,7 +32,7 @@ export function ReportsView({ rooms, instances, laundry, activities }) {
   });
 
   const thisWeekStart = weekStart(todayISO());
-  const activityStats = ACTIVITY_TYPES.map(activity => {
+  const activityStats = activityTypes.map(activity => {
     const events = activities.filter(a => a.type === activity.id);
     const perUser = Object.values(USERS).map(u => {
       const userEvents = events.filter(e => e.user === u.name);
@@ -175,11 +175,10 @@ export function ReportsView({ rooms, instances, laundry, activities }) {
         activities.length === 0 ? <EmptyState text="Noch keine Aktivitäten erfasst." /> : (
           <div className="space-y-3">
             {activityStats.map(({ activity, total, perUser }) => {
-              const Icon = activity.icon;
               return (
                 <div key={activity.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <Icon size={16} className="text-zinc-300" />
+                    <Zap size={16} className="text-zinc-300" />
                     <span className="font-medium text-sm text-zinc-50">{activity.label}</span>
                     <span className="text-xs text-zinc-500 ml-auto">{total} gesamt</span>
                   </div>

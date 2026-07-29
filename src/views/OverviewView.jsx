@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { addDays, dowSunFirst, formatDate, todayISO, weekStart, WEEKDAYS_FULL } from '../lib/dateUtils.js';
+import { Check, ChevronLeft, ChevronRight, Plus, Zap } from 'lucide-react';
+import { addDays, dowSunFirst, formatDate, formatDateTime, todayISO, weekStart, WEEKDAYS_FULL } from '../lib/dateUtils.js';
 import { byOpenFirstThenTitle } from '../lib/recurrence.js';
-import { ACTIVITY_TYPES } from '../constants.js';
 import { EmptyState, GhostButton, ToggleSwitch, inputCls } from '../components/ui.jsx';
 import { TaskCard } from '../components/TaskCard.jsx';
 
-function HouseholdCounters({ onLog }) {
+function HouseholdCounters({ activityTypes, activities, user, onLog, onUndo }) {
   const [justLogged, setJustLogged] = useState(null);
 
   function handleClick(type) {
@@ -15,25 +14,37 @@ function HouseholdCounters({ onLog }) {
     setTimeout(() => setJustLogged(v => (v === type ? null : v)), 1200);
   }
 
+  if (activityTypes.length === 0) return null;
+
+  const myLast = activities
+    .filter(a => a.user === user.name)
+    .sort((a, b) => b.ts.localeCompare(a.ts))[0];
+  const myLastLabel = myLast ? activityTypes.find(t => t.id === myLast.type)?.label : null;
+
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 mb-4">
       <div className="text-xs text-zinc-500 mb-2">Schnell erfassen</div>
       <div className="flex flex-wrap gap-2">
-        {ACTIVITY_TYPES.map(activity => {
-          const Icon = activity.icon;
+        {activityTypes.map(activity => {
           const done = justLogged === activity.id;
           return (
             <GhostButton key={activity.id} small onClick={() => handleClick(activity.id)}>
-              {done ? <Check size={13} /> : <Icon size={13} />} {activity.label}
+              {done ? <Check size={13} /> : <Zap size={13} />} {activity.label}
             </GhostButton>
           );
         })}
       </div>
+      {myLast && myLastLabel && (
+        <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-zinc-800 text-xs text-zinc-500">
+          Zuletzt erfasst: {myLastLabel} ({formatDateTime(myLast.ts)})
+          <button onClick={() => onUndo(myLast.id)} className="text-zinc-400 hover:text-red-400 underline">Rückgängig</button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function OverviewView({ instances, rooms, user, onlyMine, setOnlyMine, onUpdate, onDelete, onQuickAdd, onLogActivity }) {
+export function OverviewView({ instances, rooms, user, onlyMine, setOnlyMine, onUpdate, onDelete, onQuickAdd, activityTypes, activities, onLogActivity, onUndoActivity }) {
   const [mode, setMode] = useState('day');
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [roomFilter, setRoomFilter] = useState('all');
@@ -77,7 +88,7 @@ export function OverviewView({ instances, rooms, user, onlyMine, setOnlyMine, on
         </div>
       </div>
 
-      <HouseholdCounters onLog={onLogActivity} />
+      <HouseholdCounters activityTypes={activityTypes} activities={activities} user={user} onLog={onLogActivity} onUndo={onUndoActivity} />
 
       <div className="flex items-center justify-between mb-4">
         <button onClick={() => shift(-1)} className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400"><ChevronLeft size={18} /></button>

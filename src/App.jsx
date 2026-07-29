@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Home, LogOut, RefreshCw } from 'lucide-react';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
-import { USERS, NAV_ITEMS } from './constants.js';
+import { USERS, NAV_ITEMS, DEFAULT_ACTIVITY_TYPES } from './constants.js';
 import { addDays, formatDate, todayISO } from './lib/dateUtils.js';
 import { extendRecurringInstances, generateInstancesForDef, makeInstance, rollWindowFor, uid } from './lib/recurrence.js';
 import { loadKey, saveKey } from './lib/storage.js';
@@ -33,6 +33,7 @@ function AppInner() {
   const [shopping, setShopping] = useState([]);
   const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
   const [activities, setActivities] = useState([]);
+  const [activityTypes, setActivityTypes] = useState(DEFAULT_ACTIVITY_TYPES);
   const [vacations, setVacations] = useState([]);
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
@@ -130,6 +131,7 @@ function AppInner() {
     const s = await loadKey(supabase, 'shopping', []);
     const b = await loadKey(supabase, 'balance', { amount: null, updatedBy: null, updatedAt: null });
     const act = await loadKey(supabase, 'activities', []);
+    const actTypes = await loadKey(supabase, 'activityTypes', DEFAULT_ACTIVITY_TYPES);
 
     setRooms(r);
     setTaskDefs(ext.defs);
@@ -138,6 +140,7 @@ function AppInner() {
     setShopping(s);
     setBalance(b);
     setActivities(act);
+    setActivityTypes(actTypes);
     setVacations(v);
     setReady(true);
     saveKey(supabase, 'rooms', r);
@@ -302,6 +305,19 @@ function AppInner() {
     setActivities(next);
     saveKey(supabase, 'activities', next);
   }
+  function undoActivity(id) {
+    const next = activities.filter(a => a.id !== id);
+    setActivities(next);
+    saveKey(supabase, 'activities', next);
+  }
+
+  function persistActivityTypes(next) { setActivityTypes(next); saveKey(supabase, 'activityTypes', next); }
+  function addActivityType(label) {
+    persistActivityTypes([...activityTypes, { id: uid(), label: label.trim() }]);
+  }
+  function deleteActivityType(id) {
+    persistActivityTypes(activityTypes.filter(t => t.id !== id));
+  }
 
   function quickAdd(title, roomId, dueDate) {
     const def = { id: uid(), title, roomId, recurType: 'once', startDate: dueDate, generatedThrough: dueDate };
@@ -376,7 +392,8 @@ function AppInner() {
           {view === 'overview' && (
             <OverviewView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
               onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate}
-              onLogActivity={guard(logActivity, 'Aktivität erfassen')} />
+              activityTypes={activityTypes} activities={activities}
+              onLogActivity={guard(logActivity, 'Aktivität erfassen')} onUndoActivity={guard(undoActivity, 'Erfassung rückgängig machen')} />
           )}
           {view === 'calendar' && (
             <CalendarView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
@@ -387,7 +404,7 @@ function AppInner() {
               onCreateFromTemplate={guard(createInstanceFromTemplate, 'Aufgabe erstellen')} />
           )}
           {view === 'reports' && (
-            <ReportsView rooms={rooms} instances={instances} laundry={laundry} activities={activities} />
+            <ReportsView rooms={rooms} instances={instances} laundry={laundry} activities={activities} activityTypes={activityTypes} />
           )}
           {view === 'laundry' && (
             <LaundryView laundry={laundry} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')} />
@@ -403,7 +420,8 @@ function AppInner() {
           {view === 'settings' && (
             <SettingsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')}
               vacations={vacations} onAddVacation={guard(addVacation, 'Urlaub hinzufügen')} onDeleteVacation={guard(deleteVacation, 'Urlaub löschen')}
-              dryerTask={laundry.dryerTask} onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')} />
+              dryerTask={laundry.dryerTask} onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')}
+              activityTypes={activityTypes} onAddActivityType={guard(addActivityType, 'Aktivität hinzufügen')} onDeleteActivityType={guard(deleteActivityType, 'Aktivität löschen')} />
           )}
         </main>
       </div>
