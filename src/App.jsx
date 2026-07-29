@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Home, LogOut, Palmtree, RefreshCw } from 'lucide-react';
+import { Home, LogOut, RefreshCw } from 'lucide-react';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
 import { USERS, NAV_ITEMS } from './constants.js';
@@ -12,14 +12,13 @@ import { suppressVacationInstances } from './lib/vacation.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
 import { AccentButton, Field, GhostButton, Modal, inputCls } from './components/ui.jsx';
-import { VacationModal } from './components/VacationModal.jsx';
 import { OverviewView } from './views/OverviewView.jsx';
 import { CalendarView } from './views/CalendarView.jsx';
-import { RoomsView } from './views/RoomsView.jsx';
 import { TasksView } from './views/TasksView.jsx';
 import { ReportsView } from './views/ReportsView.jsx';
 import { LaundryView } from './views/LaundryView.jsx';
 import { ShoppingView } from './views/ShoppingView.jsx';
+import { SettingsView } from './views/SettingsView.jsx';
 
 function AppInner() {
   const [config, setConfig] = useState(() => getStoredConfig());
@@ -34,7 +33,6 @@ function AppInner() {
   const [shopping, setShopping] = useState([]);
   const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
   const [vacations, setVacations] = useState([]);
-  const [showVacation, setShowVacation] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState(null);
   const [onlyMine, setOnlyMine] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -337,10 +335,6 @@ function AppInner() {
               </span>
               <span className="text-xs font-medium" style={{ color: user.accent }}>{user.name}</span>
             </div>
-            <button onClick={() => setShowVacation(true)} title="Urlaub"
-              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500">
-              <Palmtree size={16} />
-            </button>
             <button onClick={refresh} disabled={refreshing} title="Aktualisieren"
               className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 disabled:opacity-50">
               <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
@@ -377,9 +371,6 @@ function AppInner() {
             <CalendarView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
               onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate} />
           )}
-          {view === 'rooms' && (
-            <RoomsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')} />
-          )}
           {view === 'tasks' && (
             <TasksView taskDefs={taskDefs} rooms={rooms} onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
               onCreateFromTemplate={guard(createInstanceFromTemplate, 'Aufgabe erstellen')} />
@@ -388,8 +379,7 @@ function AppInner() {
             <ReportsView rooms={rooms} instances={instances} laundry={laundry} />
           )}
           {view === 'laundry' && (
-            <LaundryView laundry={laundry} rooms={rooms} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')}
-              onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')} user={user} />
+            <LaundryView laundry={laundry} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')} />
           )}
           {view === 'shopping' && (
             <ShoppingView items={shopping} balance={balance}
@@ -398,6 +388,11 @@ function AppInner() {
               onDelete={guard(deleteShoppingItem, 'Eintrag löschen')}
               onClearBought={guard(clearBoughtShoppingItems, 'Liste aufräumen')}
               onSaveBalance={guard(saveBalance, 'Kontostand speichern')} />
+          )}
+          {view === 'settings' && (
+            <SettingsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')}
+              vacations={vacations} onAddVacation={guard(addVacation, 'Urlaub hinzufügen')} onDeleteVacation={guard(deleteVacation, 'Urlaub löschen')}
+              dryerTask={laundry.dryerTask} onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')} />
           )}
         </main>
       </div>
@@ -421,10 +416,6 @@ function AppInner() {
 
       {quickAddDate && (
         <QuickAddModal date={quickAddDate} rooms={rooms} onCancel={() => setQuickAddDate(null)} onSave={guard(quickAdd, 'Aufgabe anlegen')} />
-      )}
-      {showVacation && (
-        <VacationModal vacations={vacations} onAdd={guard(addVacation, 'Urlaub hinzufügen')} onDelete={guard(deleteVacation, 'Urlaub löschen')}
-          onClose={() => setShowVacation(false)} />
       )}
     </div>
   );

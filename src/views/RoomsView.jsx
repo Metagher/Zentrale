@@ -54,7 +54,7 @@ export function RoomsView({ rooms, instances, onSaveRooms }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-50">Räume</h1>
+          <h2 className="text-base font-semibold text-zinc-50">Räume</h2>
           <p className="text-xs text-zinc-500 mt-0.5">Grundriss und technische Informationen</p>
         </div>
         <AccentButton small onClick={() => setAdding(true)}><Plus size={14} /> Raum</AccentButton>
