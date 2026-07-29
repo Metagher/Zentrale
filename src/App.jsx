@@ -32,6 +32,7 @@ function AppInner() {
   const [instances, setInstances] = useState([]);
   const [laundry, setLaundry] = useState({ waschmaschine: LAUNDRY_DEFAULT, trockner: LAUNDRY_DEFAULT });
   const [shopping, setShopping] = useState([]);
+  const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
   const [vacations, setVacations] = useState([]);
   const [showVacation, setShowVacation] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState(null);
@@ -128,12 +129,14 @@ function AppInner() {
     };
 
     const s = await loadKey(supabase, 'shopping', []);
+    const b = await loadKey(supabase, 'balance', { amount: null, updatedBy: null, updatedAt: null });
 
     setRooms(r);
     setTaskDefs(ext.defs);
     setInstances(cleanedInstances);
     setLaundry(l);
     setShopping(s);
+    setBalance(b);
     setVacations(v);
     setReady(true);
     saveKey(supabase, 'rooms', r);
@@ -286,6 +289,12 @@ function AppInner() {
     persistShopping(shopping.filter(i => !i.done));
   }
 
+  function saveBalance(amount) {
+    const next = { amount, updatedBy: user.name, updatedAt: new Date().toISOString() };
+    setBalance(next);
+    saveKey(supabase, 'balance', next);
+  }
+
   function quickAdd(title, roomId, dueDate) {
     const def = { id: uid(), title, roomId, recurType: 'once', startDate: dueDate, generatedThrough: dueDate };
     persistDefs([...taskDefs, def]);
@@ -383,11 +392,12 @@ function AppInner() {
               onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')} user={user} />
           )}
           {view === 'shopping' && (
-            <ShoppingView items={shopping}
+            <ShoppingView items={shopping} balance={balance}
               onAdd={guard(addShoppingItem, 'Eintrag hinzufügen')}
               onToggle={guard(toggleShoppingItem, 'Eintrag abhaken')}
               onDelete={guard(deleteShoppingItem, 'Eintrag löschen')}
-              onClearBought={guard(clearBoughtShoppingItems, 'Liste aufräumen')} />
+              onClearBought={guard(clearBoughtShoppingItems, 'Liste aufräumen')}
+              onSaveBalance={guard(saveBalance, 'Kontostand speichern')} />
           )}
         </main>
       </div>
