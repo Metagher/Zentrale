@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Home, LogOut, RefreshCw } from 'lucide-react';
+import { Cake, Home, LogOut, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
 import { USERS, NAV_ITEMS } from './constants.js';
-import { addDays, formatDate, todayISO } from './lib/dateUtils.js';
+import { addDays, formatDate, todayISO, weekStart } from './lib/dateUtils.js';
 import { extendRecurringInstances, generateInstancesForDef, makeInstance, rollWindowFor, uid } from './lib/recurrence.js';
 import { loadKey, saveKey } from './lib/storage.js';
 import { guard } from './lib/guard.js';
@@ -15,6 +15,7 @@ import { AccentButton, Field, GhostButton, Modal, Toast, inputCls } from './comp
 import { CalendarView } from './views/CalendarView.jsx';
 import { TasksView } from './views/TasksView.jsx';
 import { OneTimeTasksView } from './views/OneTimeTasksView.jsx';
+import { PeopleView } from './views/PeopleView.jsx';
 import { ShoppingView } from './views/ShoppingView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
 
@@ -28,6 +29,7 @@ function AppInner() {
   const [taskDefs, setTaskDefs] = useState([]);
   const [instances, setInstances] = useState([]);
   const [shopping, setShopping] = useState([]);
+  const [people, setPeople] = useState([]);
   const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
   const [vacations, setVacations] = useState([]);
   const [quickAddDate, setQuickAddDate] = useState(null);
@@ -37,6 +39,8 @@ function AppInner() {
   const [qrTaskId, setQrTaskId] = useState(() => new URLSearchParams(window.location.search).get('completeTask'));
   const instancesRef = useRef(instances);
   const userNameRef = useRef(userName);
+  const birthdayCheckedRef = useRef(false);
+  const [birthdayPopup, setBirthdayPopup] = useState([]);
 
   useEffect(() => { instancesRef.current = instances; }, [instances]);
   useEffect(() => { userNameRef.current = userName; }, [userName]);
@@ -48,6 +52,19 @@ function AppInner() {
   }, [toast]);
 
   useEffect(() => { if (supabase) load(); }, [supabase]);
+  useEffect(() => {
+    if (!ready || !userName || birthdayCheckedRef.current) return;
+    birthdayCheckedRef.current = true;
+    const start = weekStart(todayISO());
+    const dates = Array.from({ length: 7 }, (_, index) => addDays(start, index));
+    const upcoming = [];
+    people.forEach(person => dates.forEach(date => {
+      if (person.birthday?.slice(5) === date.slice(5)) {
+        upcoming.push({ person, date, age: Number(date.slice(0, 4)) - Number(person.birthday.slice(0, 4)) });
+      }
+    }));
+    if (upcoming.length) setBirthdayPopup(upcoming.sort((a, b) => a.date.localeCompare(b.date)));
+  }, [ready, userName, people]);
   useEffect(() => {
     if (!supabase || !userName) return;
     const id = setInterval(() => { load(); }, 30000);
@@ -150,12 +167,14 @@ function AppInner() {
     }
 
     const s = await loadKey(supabase, 'shopping', []);
+    const p = await loadKey(supabase, 'people', []);
     const b = await loadKey(supabase, 'balance', { amount: null, updatedBy: null, updatedAt: null });
 
     setRooms(r);
     setTaskDefs(ext.defs);
     setInstances(cleanedInstances);
     setShopping(s);
+    setPeople(p);
     setBalance(b);
     setVacations(v);
     setReady(true);
@@ -302,6 +321,14 @@ function AppInner() {
     persistShopping(shopping.filter(i => !i.done));
   }
 
+  function persistPeople(next) { setPeople(next); saveKey(supabase, 'people', next); }
+  function addPerson(data) { persistPeople([...people, { ...data, id: uid() }]); }
+  function editPerson(data) { persistPeople(people.map(person => person.id === data.id ? data : person)); }
+  function deletePerson(person) {
+    if (!window.confirm(`Person "${person.name}" löschen?`)) return;
+    persistPeople(people.filter(item => item.id !== person.id));
+  }
+
   function saveBalance(amount) {
     const next = { amount, updatedBy: user.name, updatedAt: new Date().toISOString() };
     setBalance(next);
@@ -309,7 +336,7 @@ function AppInner() {
   }
 
   function cleanupCorruptData() {
-    const current = { rooms, taskDefs, instances, shopping, balance, vacations };
+    const current = { rooms, taskDefs, instances, shopping, people, balance, vacations };
     const issueCount = inspectData(current).length;
     if (!issueCount || !window.confirm(`${issueCount} Datenproblem${issueCount === 1 ? '' : 'e'} wirklich bereinigen? Die betroffenen Einträge werden dauerhaft gelöscht.`)) return;
     const cleaned = cleanData(current);
@@ -317,6 +344,7 @@ function AppInner() {
     setTaskDefs(cleaned.taskDefs);
     setInstances(cleaned.instances);
     setShopping(cleaned.shopping);
+    setPeople(cleaned.people);
     setBalance(cleaned.balance);
     setVacations(cleaned.vacations);
     Object.entries(cleaned).forEach(([key, value]) => saveKey(supabase, key, value));
@@ -386,7 +414,7 @@ function AppInner() {
   if (!userName) return <Login onLogin={setUserName} onReset={() => { clearConfig(); setConfig(null); setSupabase(null); setReady(false); }} />;
 
   const user = USERS[userName];
-  const dataIssues = inspectData({ rooms, taskDefs, instances, shopping, balance, vacations });
+  const dataIssues = inspectData({ rooms, taskDefs, instances, shopping, people, balance, vacations });
 
   return (
     <div style={{ '--accent': user.accent, '--accent-ring': user.ring }} className="min-h-screen bg-zinc-950">
@@ -439,8 +467,11 @@ function AppInner() {
               onAdd={guard(addOneTimeTask, 'Aufgabe anlegen')} onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} />
           )}
           {view === 'calendar' && (
-            <CalendarView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
+            <CalendarView instances={instances} rooms={rooms} people={people} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
               onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate} />
+          )}
+          {view === 'people' && (
+            <PeopleView people={people} onAdd={guard(addPerson, 'Person hinzufügen')} onEdit={guard(editPerson, 'Person speichern')} onDelete={guard(deletePerson, 'Person löschen')} />
           )}
           {view === 'tasks' && (
             <TasksView taskDefs={taskDefs} instances={instances} rooms={rooms} vacations={vacations} user={user}
@@ -485,6 +516,7 @@ function AppInner() {
       {quickAddDate && (
         <QuickAddModal date={quickAddDate} rooms={rooms} onCancel={() => setQuickAddDate(null)} onSave={guard(quickAdd, 'Aufgabe anlegen')} />
       )}
+      {birthdayPopup.length > 0 && <BirthdayPopup birthdays={birthdayPopup} onClose={() => setBirthdayPopup([])} />}
       <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
@@ -505,6 +537,16 @@ function QrCompletionScreen({ task, onComplete, onCancel }) {
       <button onClick={onCancel} className="w-full min-h-11 mt-4 text-sm text-zinc-500">Abbrechen</button>
     </div>
   </div>;
+}
+
+function BirthdayPopup({ birthdays, onClose }) {
+  return <Modal title="Geburtstage diese Woche" onClose={onClose}>
+    <div className="space-y-2">{birthdays.map(({ person, date, age }) => <div key={`${person.id}-${date}`} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 flex items-center gap-3">
+      <span className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}><Cake size={18} /></span>
+      <div><div className="text-sm font-medium text-zinc-50">{person.name}</div><div className="text-xs text-zinc-500 mt-0.5">{formatDate(date)} · wird {age} Jahre · Jahrgang {person.birthday.slice(0, 4)}</div></div>
+    </div>)}</div>
+    <AccentButton onClick={onClose} className="w-full mt-4">Verstanden</AccentButton>
+  </Modal>;
 }
 
 function QuickAddModal({ date, rooms, onCancel, onSave }) {

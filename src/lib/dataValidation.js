@@ -4,7 +4,7 @@ const isText = value => typeof value === 'string' && value.trim().length > 0;
 export function inspectData(data) {
   const issues = [];
   const add = (collection, id, message) => issues.push({ collection, id: id || 'unbekannt', message });
-  const arrays = ['rooms', 'taskDefs', 'instances', 'shopping', 'vacations'];
+  const arrays = ['rooms', 'taskDefs', 'instances', 'shopping', 'people', 'vacations'];
   arrays.forEach(key => { if (!Array.isArray(data[key])) add(key, 'gesamter Bereich', 'Gespeicherter Wert ist keine Liste.'); });
 
   const rooms = Array.isArray(data.rooms) ? data.rooms : [];
@@ -40,6 +40,10 @@ export function inspectData(data) {
     if (item.completed && (!isText(item.completedAt) || Number.isNaN(Date.parse(item.completedAt)))) add('instances', item.id, 'Erledigungszeitpunkt ist ungültig.');
   });
   (Array.isArray(data.shopping) ? data.shopping : []).forEach((x, i) => { if (isObject(x) && !isText(x.name)) add('shopping', x.id || `Position ${i + 1}`, 'Bezeichnung fehlt.'); });
+  (Array.isArray(data.people) ? data.people : []).forEach((x, i) => {
+    if (!isObject(x)) return;
+    if (!isText(x.name) || !/^\d{4}-\d{2}-\d{2}$/.test(x.birthday || '') || Number.isNaN(Date.parse(`${x.birthday}T00:00:00`))) add('people', x.id || `Position ${i + 1}`, 'Name oder Geburtstag ist ungültig.');
+  });
   (Array.isArray(data.vacations) ? data.vacations : []).forEach((x, i) => {
     if (!isObject(x) || !isText(x.start) || !isText(x.end) || x.end < x.start) add('vacations', x?.id || `Position ${i + 1}`, 'Urlaubszeitraum ist ungültig.');
   });
@@ -65,6 +69,7 @@ export function cleanData(data) {
   return {
     ...data, rooms, taskDefs, instances,
     shopping: uniqueValid(data.shopping, x => isText(x.name)),
+    people: uniqueValid(data.people, x => isText(x.name) && /^\d{4}-\d{2}-\d{2}$/.test(x.birthday || '') && !Number.isNaN(Date.parse(`${x.birthday}T00:00:00`))),
     vacations: uniqueValid(data.vacations, x => isText(x.start) && isText(x.end) && x.end >= x.start),
     balance: isObject(data.balance) ? data.balance : { amount: null, updatedBy: null, updatedAt: null },
   };

@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Cake, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { USERS } from '../constants.js';
 import { dowSunFirst, formatDate, todayISO, WEEKDAYS_FULL, WEEKDAYS_SHORT, MONTHS_FULL } from '../lib/dateUtils.js';
 import { EmptyState, ToggleSwitch } from '../components/ui.jsx';
 import { TaskCard } from '../components/TaskCard.jsx';
 
-export function CalendarView({ instances, rooms, user, onlyMine, setOnlyMine, onUpdate, onDelete, onQuickAdd }) {
+export function CalendarView({ instances, rooms, people, user, onlyMine, setOnlyMine, onUpdate, onDelete, onQuickAdd }) {
   const [monthCursor, setMonthCursor] = useState(() => {
     const t = new Date();
     return { y: t.getFullYear(), m: t.getMonth() };
@@ -34,6 +34,8 @@ export function CalendarView({ instances, rooms, user, onlyMine, setOnlyMine, on
 
   const dayItems = filteredInstances.filter(i => i.dueDate === selectedDate)
     .sort((a, b) => a.title.localeCompare(b.title));
+  const birthdaysOn = date => people.filter(person => person.birthday?.slice(5) === date.slice(5));
+  const selectedBirthdays = birthdaysOn(selectedDate);
 
   return (
     <div>
@@ -60,6 +62,7 @@ export function CalendarView({ instances, rooms, user, onlyMine, setOnlyMine, on
         {cells.map((dateStr, idx) => {
           if (!dateStr) return <div key={idx} />;
           const items = filteredInstances.filter(i => i.dueDate === dateStr);
+          const birthdays = birthdaysOn(dateStr);
           const isToday = dateStr === todayISO();
           const isSelected = dateStr === selectedDate;
           return (
@@ -74,6 +77,7 @@ export function CalendarView({ instances, rooms, user, onlyMine, setOnlyMine, on
                   <span key={i2} className="w-1 h-1 rounded-full"
                     style={{ backgroundColor: isSelected ? 'white' : (it.completed ? '#71717a' : (it.assignedTo ? USERS[it.assignedTo].accent : '#52525b')) }} />
                 ))}
+                {birthdays.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400" />}
               </span>
             </button>
           );
@@ -89,7 +93,13 @@ export function CalendarView({ instances, rooms, user, onlyMine, setOnlyMine, on
             <Plus size={13} /> Hinzufügen
           </button>
         </div>
-        {dayItems.length === 0 ? (
+        {selectedBirthdays.length > 0 && <div className="space-y-2 mb-3">{selectedBirthdays.map(person => {
+          const age = Number(selectedDate.slice(0, 4)) - Number(person.birthday.slice(0, 4));
+          return <div key={person.id} className="rounded-xl border border-fuchsia-900/60 bg-fuchsia-950/20 px-4 py-3 flex items-center gap-3">
+            <Cake size={17} className="text-fuchsia-400 shrink-0" /><div><div className="text-sm font-medium text-zinc-50">{person.name} hat Geburtstag</div><div className="text-xs text-zinc-500 mt-0.5">Jahrgang {person.birthday.slice(0, 4)} · wird {age} Jahre</div></div>
+          </div>;
+        })}</div>}
+        {dayItems.length === 0 && selectedBirthdays.length === 0 ? (
           <EmptyState text="Keine Aufgaben an diesem Tag." />
         ) : (
           <div className="space-y-2">
