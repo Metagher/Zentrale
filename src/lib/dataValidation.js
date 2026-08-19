@@ -43,7 +43,6 @@ export function inspectData(data) {
   (Array.isArray(data.vacations) ? data.vacations : []).forEach((x, i) => {
     if (!isObject(x) || !isText(x.start) || !isText(x.end) || x.end < x.start) add('vacations', x?.id || `Position ${i + 1}`, 'Urlaubszeitraum ist ungültig.');
   });
-  if (!isObject(data.laundry)) add('laundry', 'gesamter Bereich', 'Waschstatus ist ungültig.');
   if (!isObject(data.balance)) add('balance', 'gesamter Bereich', 'Kontostand ist ungültig.');
   return issues;
 }
@@ -67,7 +66,6 @@ export function cleanData(data) {
     ...data, rooms, taskDefs, instances,
     shopping: uniqueValid(data.shopping, x => isText(x.name)),
     vacations: uniqueValid(data.vacations, x => isText(x.start) && isText(x.end) && x.end >= x.start),
-    laundry: isObject(data.laundry) ? data.laundry : {},
     balance: isObject(data.balance) ? data.balance : { amount: null, updatedBy: null, updatedAt: null },
   };
 }

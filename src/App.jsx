@@ -7,7 +7,6 @@ import { addDays, formatDate, todayISO } from './lib/dateUtils.js';
 import { extendRecurringInstances, generateInstancesForDef, makeInstance, rollWindowFor, uid } from './lib/recurrence.js';
 import { loadKey, saveKey } from './lib/storage.js';
 import { guard } from './lib/guard.js';
-import { LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey } from './lib/laundry.js';
 import { cleanData, inspectData } from './lib/dataValidation.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
@@ -15,7 +14,6 @@ import { AccentButton, Field, GhostButton, Modal, Toast, inputCls } from './comp
 import { CalendarView } from './views/CalendarView.jsx';
 import { TasksView } from './views/TasksView.jsx';
 import { OneTimeTasksView } from './views/OneTimeTasksView.jsx';
-import { LaundryView } from './views/LaundryView.jsx';
 import { ShoppingView } from './views/ShoppingView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
 
@@ -28,7 +26,6 @@ function AppInner() {
   const [rooms, setRooms] = useState([]);
   const [taskDefs, setTaskDefs] = useState([]);
   const [instances, setInstances] = useState([]);
-  const [laundry, setLaundry] = useState({ waschmaschine: LAUNDRY_DEFAULT, trockner: LAUNDRY_DEFAULT });
   const [shopping, setShopping] = useState([]);
   const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
   const [vacations, setVacations] = useState([]);
@@ -150,20 +147,12 @@ function AppInner() {
       }
     }
 
-    let l = await loadKey(supabase, 'laundry', null);
-    if (!l || typeof l !== 'object') l = {};
-    l = {
-      waschmaschine: { ...LAUNDRY_DEFAULT, ...(l.waschmaschine || {}), counts: { ...(l.waschmaschine?.counts || {}) } },
-      trockner: { ...LAUNDRY_DEFAULT, ...(l.trockner || {}), counts: { ...(l.trockner?.counts || {}) } },
-    };
-
     const s = await loadKey(supabase, 'shopping', []);
     const b = await loadKey(supabase, 'balance', { amount: null, updatedBy: null, updatedAt: null });
 
     setRooms(r);
     setTaskDefs(ext.defs);
     setInstances(cleanedInstances);
-    setLaundry(l);
     setShopping(s);
     setBalance(b);
     setVacations(v);
@@ -180,30 +169,6 @@ function AppInner() {
     } finally {
       setRefreshing(false);
     }
-  }
-
-  function persistLaundry(next) { setLaundry(next); saveKey(supabase, 'laundry', next); }
-  function cycleMachine(machine) {
-    const current = laundry[machine] || LAUNDRY_DEFAULT;
-    const nextIndex = (LAUNDRY_STATES.indexOf(current.status) + 1) % LAUNDRY_STATES.length;
-    const nextStatus = LAUNDRY_STATES[nextIndex];
-    const counts = { ...(current.counts || {}) };
-    if (nextStatus === 'FERTIG') {
-      const key = monthKey();
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    const next = {
-      ...laundry,
-      [machine]: { status: nextStatus, changedBy: user.name, changedAt: new Date().toISOString(), counts },
-    };
-    persistLaundry(next);
-  }
-  function adjustLaundryCount(machine, delta) {
-    const current = laundry[machine] || LAUNDRY_DEFAULT;
-    const key = monthKey();
-    const counts = { ...(current.counts || {}) };
-    counts[key] = Math.max(0, (counts[key] || 0) + delta);
-    persistLaundry({ ...laundry, [machine]: { ...current, counts } });
   }
 
   function persistRooms(next) { setRooms(next); saveKey(supabase, 'rooms', next); }
@@ -342,14 +307,13 @@ function AppInner() {
   }
 
   function cleanupCorruptData() {
-    const current = { rooms, taskDefs, instances, laundry, shopping, balance, vacations };
+    const current = { rooms, taskDefs, instances, shopping, balance, vacations };
     const issueCount = inspectData(current).length;
     if (!issueCount || !window.confirm(`${issueCount} Datenproblem${issueCount === 1 ? '' : 'e'} wirklich bereinigen? Die betroffenen Einträge werden dauerhaft gelöscht.`)) return;
     const cleaned = cleanData(current);
     setRooms(cleaned.rooms);
     setTaskDefs(cleaned.taskDefs);
     setInstances(cleaned.instances);
-    setLaundry(cleaned.laundry);
     setShopping(cleaned.shopping);
     setBalance(cleaned.balance);
     setVacations(cleaned.vacations);
@@ -387,7 +351,7 @@ function AppInner() {
   if (!userName) return <Login onLogin={setUserName} onReset={() => { clearConfig(); setConfig(null); setSupabase(null); setReady(false); }} />;
 
   const user = USERS[userName];
-  const dataIssues = inspectData({ rooms, taskDefs, instances, laundry, shopping, balance, vacations });
+  const dataIssues = inspectData({ rooms, taskDefs, instances, shopping, balance, vacations });
 
   return (
     <div style={{ '--accent': user.accent, '--accent-ring': user.ring }} className="min-h-screen bg-zinc-950">
@@ -448,9 +412,6 @@ function AppInner() {
               onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
               onComplete={guard(completeHouseholdTask, 'Aufgabe erledigen')} onUndo={guard(undoHouseholdCompletion, 'Erledigung zurücknehmen')}
               onAddHistory={guard(addHouseholdHistory, 'Historischen Eintrag anlegen')} onDeleteHistory={guard(deleteHouseholdHistory, 'Historischen Eintrag löschen')} />
-          )}
-          {view === 'laundry' && (
-            <LaundryView laundry={laundry} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')} />
           )}
           {view === 'shopping' && (
             <ShoppingView items={shopping} balance={balance}
