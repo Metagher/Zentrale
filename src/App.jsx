@@ -15,7 +15,6 @@ import { AccentButton, Field, GhostButton, Modal, Toast, inputCls } from './comp
 import { CalendarView } from './views/CalendarView.jsx';
 import { TasksView } from './views/TasksView.jsx';
 import { OneTimeTasksView } from './views/OneTimeTasksView.jsx';
-import { ReportsView } from './views/ReportsView.jsx';
 import { LaundryView } from './views/LaundryView.jsx';
 import { ShoppingView } from './views/ShoppingView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
@@ -294,10 +293,18 @@ function AppInner() {
   function undoHouseholdCompletion(instance) {
     persistInstances(instances.filter(i => i.id !== instance.id));
   }
+  function addHouseholdHistory(def, date, completedBy) {
+    persistInstances([...instances, {
+      ...makeInstance(def, date), completed: true, completedAt: `${date}T12:00:00`, completedBy,
+    }]);
+  }
+  function deleteHouseholdHistory(instance) {
+    persistInstances(instances.filter(i => i.id !== instance.id));
+  }
   function deleteTaskDef(def) {
-    if (!window.confirm(`Aufgabe "${def.title}" inklusive zukünftiger offener Termine löschen?`)) return;
+    if (!window.confirm(`Aufgabe "${def.title}" inklusive ihrer gesamten Historie löschen?`)) return;
     persistDefs(taskDefs.filter(d => d.id !== def.id));
-    persistInstances(instances.filter(i => !(i.defId === def.id && !i.completed)));
+    persistInstances(instances.filter(i => i.defId !== def.id));
     persistRooms(rooms.map(r => r.cleaningDefId === def.id ? { ...r, cleaningDefId: null } : r));
   }
 
@@ -439,10 +446,8 @@ function AppInner() {
           {view === 'tasks' && (
             <TasksView taskDefs={taskDefs} instances={instances} rooms={rooms} vacations={vacations} user={user}
               onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
-              onComplete={guard(completeHouseholdTask, 'Aufgabe erledigen')} onUndo={guard(undoHouseholdCompletion, 'Erledigung zurücknehmen')} />
-          )}
-          {view === 'reports' && (
-            <ReportsView rooms={rooms} instances={instances} laundry={laundry} />
+              onComplete={guard(completeHouseholdTask, 'Aufgabe erledigen')} onUndo={guard(undoHouseholdCompletion, 'Erledigung zurücknehmen')}
+              onAddHistory={guard(addHouseholdHistory, 'Historischen Eintrag anlegen')} onDeleteHistory={guard(deleteHouseholdHistory, 'Historischen Eintrag löschen')} />
           )}
           {view === 'laundry' && (
             <LaundryView laundry={laundry} onCycle={guard(cycleMachine, 'Waschstatus ändern')} onAdjust={guard(adjustLaundryCount, 'Zähler anpassen')} />
