@@ -4,16 +4,39 @@ import { formatDateTime } from '../lib/dateUtils.js';
 import { AccentButton, EmptyState, Field, GhostButton, Modal, inputCls } from '../components/ui.jsx';
 
 function TaskForm({ initial, rooms, onCancel, onSave }) {
-  const [form, setForm] = useState({ title: initial?.title || '', roomId: initial?.roomId || rooms[0]?.id || '' });
+  const [form, setForm] = useState({
+    title: initial?.title || '', roomId: initial?.roomId || rooms[0]?.id || '',
+    greenDays: initial?.greenDays ?? 3, yellowDays: initial?.yellowDays ?? 7,
+  });
   return <Modal title={initial ? 'Haushaltsaufgabe bearbeiten' : 'Neue Haushaltsaufgabe'} onClose={onCancel}>
     <Field label="Was ist zu tun?"><input autoFocus className={inputCls} value={form.title} onChange={e => setForm(v => ({ ...v, title: e.target.value }))} placeholder="z. B. Waschbecken putzen" /></Field>
     <Field label="Raum"><select className={inputCls} value={form.roomId} onChange={e => setForm(v => ({ ...v, roomId: e.target.value }))}>
       {rooms.map(room => <option key={room.id} value={room.id}>{room.name}</option>)}
     </select></Field>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 mb-3">
+      <div className="text-xs font-medium text-zinc-300 mb-3">Wann wechselt der Status?</div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Super bis (Tage)"><input type="number" min="0" inputMode="numeric" className={inputCls + ' text-base'} value={form.greenDays} onChange={e => setForm(v => ({ ...v, greenDays: Number(e.target.value) }))} /></Field>
+        <Field label="Okay bis (Tage)"><input type="number" min="1" inputMode="numeric" className={inputCls + ' text-base'} value={form.yellowDays} onChange={e => setForm(v => ({ ...v, yellowDays: Number(e.target.value) }))} /></Field>
+      </div>
+      <div className="flex gap-3 text-[11px] text-zinc-500"><span className="text-emerald-400">● Super</span><span className="text-amber-400">● Okay</span><span className="text-red-400">● Danach zu lange</span></div>
+    </div>
     <div className="flex gap-2 justify-end mt-2"><GhostButton onClick={onCancel}>Abbrechen</GhostButton>
-      <AccentButton disabled={!form.title.trim() || !form.roomId} onClick={() => onSave({ ...initial, ...form, title: form.title.trim(), household: true })}>Speichern</AccentButton>
+      <AccentButton disabled={!form.title.trim() || !form.roomId || form.greenDays < 0 || form.yellowDays <= form.greenDays} onClick={() => onSave({ ...initial, ...form, title: form.title.trim(), household: true })}>Speichern</AccentButton>
     </div>
   </Modal>;
+}
+
+function taskAge(task, completion) {
+  const reference = completion?.completedAt || task.createdAt || `${task.startDate || new Date().toISOString().slice(0, 10)}T00:00:00`;
+  return Math.max(0, (Date.now() - new Date(reference).getTime()) / 86400000);
+}
+
+function taskStatus(task, completion) {
+  const age = taskAge(task, completion);
+  if (age <= (task.greenDays ?? 3)) return 'green';
+  if (age <= (task.yellowDays ?? 7)) return 'yellow';
+  return 'red';
 }
 
 function ageLabel(iso) {
@@ -26,30 +49,29 @@ function ageLabel(iso) {
 
 function HouseholdStatus({ tasks, completionByDef }) {
   const stats = useMemo(() => {
-    const now = Date.now();
-    const ages = tasks.map(task => {
-      const reference = completionByDef[task.id]?.completedAt || task.createdAt || `${task.startDate || new Date().toISOString().slice(0, 10)}T00:00:00`;
-      return Math.max(0, (now - new Date(reference).getTime()) / 86400000);
-    });
-    const average = ages.length ? ages.reduce((sum, days) => sum + days, 0) / ages.length : 0;
+    const statuses = tasks.map(task => taskStatus(task, completionByDef[task.id]));
     return {
-      average,
-      current: ages.filter(days => days < 3).length,
-      soon: ages.filter(days => days >= 3 && days < 7).length,
-      overdue: ages.filter(days => days >= 7).length,
+      current: statuses.filter(status => status === 'green').length,
+      soon: statuses.filter(status => status === 'yellow').length,
+      overdue: statuses.filter(status => status === 'red').length,
     };
   }, [tasks, completionByDef]);
   if (!tasks.length) return null;
-  const averageLabel = stats.average < 1 ? `${Math.round(stats.average * 24)} Std.` : `${stats.average.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Tage`;
-  const tone = stats.average < 3 ? 'text-emerald-400' : stats.average < 7 ? 'text-amber-400' : 'text-red-400';
   const width = count => `${(count / tasks.length) * 100}%`;
+  const colors = [[16, 185, 129], [245, 158, 11], [239, 68, 68]];
+  const counts = [stats.current, stats.soon, stats.overdue];
+  const mixed = colors[0].map((_, channel) => Math.round(colors.reduce((sum, color, index) => sum + color[channel] * counts[index], 0) / tasks.length));
+  const mixedColor = `rgb(${mixed.join(',')})`;
 
   return <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 mb-6">
     <div className="flex items-center justify-between gap-4">
-      <div>
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-full border-4 border-zinc-800 shadow-inner shrink-0" style={{ backgroundColor: mixedColor, boxShadow: `0 0 18px ${mixedColor}55` }} />
+        <div>
         <div className="text-xs text-zinc-500 flex items-center gap-1.5"><TrendingUp size={13} /> Haushaltsstatus</div>
-        <div className={`text-2xl font-semibold mt-1 ${tone}`}>Ø {averageLabel}</div>
-        <div className="text-xs text-zinc-500 mt-0.5">seit Aufgaben zuletzt erledigt wurden</div>
+        <div className="text-lg font-semibold mt-0.5" style={{ color: mixedColor }}>Gesamtzustand</div>
+        <div className="text-xs text-zinc-500">Mischung aus allen Aufgaben</div>
+        </div>
       </div>
       <div className="text-right shrink-0">
         <div className="text-lg font-semibold text-zinc-100">{tasks.length}</div>
@@ -106,10 +128,18 @@ export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDe
         <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">{room.name}</div>
         <div className="grid gap-2 md:grid-cols-2">{tasks.map(def => {
           const last = completionByDef[def.id];
-          return <div key={def.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          const status = taskStatus(def, last);
+          const statusStyle = {
+            green: { borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.07)' },
+            yellow: { borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.07)' },
+            red: { borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.07)' },
+          }[status];
+          const statusText = { green: 'Super', yellow: 'Okay', red: 'Zu lange' }[status];
+          const statusClass = { green: 'text-emerald-400', yellow: 'text-amber-400', red: 'text-red-400' }[status];
+          return <div key={def.id} className="rounded-xl border bg-zinc-900 p-4" style={statusStyle}>
             <div className="flex items-start justify-between gap-3"><div className="min-w-0">
-              <div className="font-medium text-sm text-zinc-50">{def.title}</div>
-              <div className={`text-xs mt-1 ${last ? 'text-zinc-400' : 'text-amber-400'}`}><History size={11} className="inline mr-1" />{ageLabel(last?.completedAt)}</div>
+              <div className="font-medium text-sm text-zinc-50 flex items-center gap-2">{def.title}<span className={`text-[10px] uppercase tracking-wide ${statusClass}`}>{statusText}</span></div>
+              <div className={`text-xs mt-1 ${statusClass}`}><History size={11} className="inline mr-1" />{ageLabel(last?.completedAt)}</div>
               {last && <div className="text-[11px] text-zinc-600 mt-0.5">von {last.completedBy} · {formatDateTime(last.completedAt)}</div>}
             </div><AccentButton small onClick={() => onComplete(def, user.name)}><Check size={14} /> Erledigt</AccentButton></div>
             <div className="flex items-center gap-3 mt-3 pt-2.5 border-t border-zinc-800">
