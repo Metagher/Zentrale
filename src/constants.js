@@ -7,15 +7,6 @@ export const USERS = {
   Marie:  { name: 'Marie',  accent: '#db2777', light: '#fdf2f8', soft: '#fce7f3', ring: '#fbcfe8' },
 };
 
-// Startbelegung für die Schnellerfassungs-Aktivitäten (Waschstatus-Seite -> Übersicht).
-// Nutzer können darüber hinaus eigene Aktivitäten unter Einstellungen anlegen/löschen;
-// die tatsächlich aktive Liste liegt dann im 'activityTypes'-KV-Eintrag.
-export const DEFAULT_ACTIVITY_TYPES = [
-  { id: 'dishwasher_in', label: 'Spülmaschine einräumen' },
-  { id: 'dishwasher_out', label: 'Spülmaschine ausräumen' },
-  { id: 'cooking', label: 'Kochen' },
-];
-
 export const NAV_ITEMS = [
   { id: 'tasks', label: 'Haushalt', icon: ListChecks },
   { id: 'overview', label: 'Planung', icon: Home },

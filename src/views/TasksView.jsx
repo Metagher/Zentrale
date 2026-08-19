@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, History, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react';
 import { formatDateTime } from '../lib/dateUtils.js';
 import { AccentButton, EmptyState, Field, GhostButton, Modal, inputCls } from '../components/ui.jsx';
 
@@ -24,6 +24,51 @@ function ageLabel(iso) {
   return `Seit ${days} Tagen nicht erledigt`;
 }
 
+function HouseholdStatus({ tasks, completionByDef }) {
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const ages = tasks.map(task => {
+      const reference = completionByDef[task.id]?.completedAt || task.createdAt || `${task.startDate || new Date().toISOString().slice(0, 10)}T00:00:00`;
+      return Math.max(0, (now - new Date(reference).getTime()) / 86400000);
+    });
+    const average = ages.length ? ages.reduce((sum, days) => sum + days, 0) / ages.length : 0;
+    return {
+      average,
+      current: ages.filter(days => days < 3).length,
+      soon: ages.filter(days => days >= 3 && days < 7).length,
+      overdue: ages.filter(days => days >= 7).length,
+    };
+  }, [tasks, completionByDef]);
+  if (!tasks.length) return null;
+  const averageLabel = stats.average < 1 ? `${Math.round(stats.average * 24)} Std.` : `${stats.average.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Tage`;
+  const tone = stats.average < 3 ? 'text-emerald-400' : stats.average < 7 ? 'text-amber-400' : 'text-red-400';
+  const width = count => `${(count / tasks.length) * 100}%`;
+
+  return <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 mb-6">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <div className="text-xs text-zinc-500 flex items-center gap-1.5"><TrendingUp size={13} /> Haushaltsstatus</div>
+        <div className={`text-2xl font-semibold mt-1 ${tone}`}>Ø {averageLabel}</div>
+        <div className="text-xs text-zinc-500 mt-0.5">seit Aufgaben zuletzt erledigt wurden</div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-lg font-semibold text-zinc-100">{tasks.length}</div>
+        <div className="text-[11px] text-zinc-500">Aufgaben</div>
+      </div>
+    </div>
+    <div className="h-2.5 flex overflow-hidden rounded-full bg-zinc-800 mt-4" aria-label="Aktualität der Haushaltsaufgaben">
+      {stats.current > 0 && <span className="bg-emerald-500" style={{ width: width(stats.current) }} />}
+      {stats.soon > 0 && <span className="bg-amber-500" style={{ width: width(stats.soon) }} />}
+      {stats.overdue > 0 && <span className="bg-red-500" style={{ width: width(stats.overdue) }} />}
+    </div>
+    <div className="grid grid-cols-3 gap-2 mt-3 text-[11px]">
+      <div className="text-zinc-500"><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" />Aktuell <strong className="text-zinc-300">{stats.current}</strong></div>
+      <div className="text-zinc-500 text-center"><span className="inline-block w-2 h-2 rounded-full bg-amber-500 mr-1" />Bald <strong className="text-zinc-300">{stats.soon}</strong></div>
+      <div className="text-zinc-500 text-right"><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />Lange <strong className="text-zinc-300">{stats.overdue}</strong></div>
+    </div>
+  </div>;
+}
+
 export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDef, onDeleteDef, onComplete, onUndo }) {
   const [form, setForm] = useState(null);
   const [roomFilter, setRoomFilter] = useState('all');
@@ -35,6 +80,7 @@ export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDe
     return result;
   }, [instances]);
   const visible = taskDefs.filter(def => def.household && def.id && def.roomId && (roomFilter === 'all' || def.roomId === roomFilter));
+  const allHouseholdTasks = taskDefs.filter(def => def.household && def.id && def.roomId);
   const grouped = rooms.map(room => ({ room, tasks: visible.filter(def => def.roomId === room.id).sort((a, b) => {
     const aTime = completionByDef[a.id]?.completedAt || '';
     const bTime = completionByDef[b.id]?.completedAt || '';
@@ -46,6 +92,8 @@ export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDe
       <h1 className="text-lg font-semibold text-zinc-50">Haushalt</h1>
       <p className="text-xs text-zinc-500 mt-0.5">Immer da. Erledigen, wenn es gemacht wurde.</p>
     </div><AccentButton small disabled={!rooms.length} onClick={() => setForm('new')}><Plus size={14} /> Aufgabe</AccentButton></div>
+
+    <HouseholdStatus tasks={allHouseholdTasks} completionByDef={completionByDef} />
 
     {rooms.length > 1 && <div className="flex gap-2 overflow-x-auto pb-1 mb-5">
       <GhostButton small onClick={() => setRoomFilter('all')}>Alle Räume</GhostButton>

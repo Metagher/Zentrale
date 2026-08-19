@@ -4,7 +4,7 @@ const isText = value => typeof value === 'string' && value.trim().length > 0;
 export function inspectData(data) {
   const issues = [];
   const add = (collection, id, message) => issues.push({ collection, id: id || 'unbekannt', message });
-  const arrays = ['rooms', 'taskDefs', 'instances', 'shopping', 'activities', 'activityTypes', 'vacations'];
+  const arrays = ['rooms', 'taskDefs', 'instances', 'shopping', 'vacations'];
   arrays.forEach(key => { if (!Array.isArray(data[key])) add(key, 'gesamter Bereich', 'Gespeicherter Wert ist keine Liste.'); });
 
   const rooms = Array.isArray(data.rooms) ? data.rooms : [];
@@ -37,11 +37,6 @@ export function inspectData(data) {
     if (item.completed && (!isText(item.completedAt) || Number.isNaN(Date.parse(item.completedAt)))) add('instances', item.id, 'Erledigungszeitpunkt ist ungültig.');
   });
   (Array.isArray(data.shopping) ? data.shopping : []).forEach((x, i) => { if (isObject(x) && !isText(x.name)) add('shopping', x.id || `Position ${i + 1}`, 'Bezeichnung fehlt.'); });
-  (Array.isArray(data.activities) ? data.activities : []).forEach((x, i) => {
-    if (!isObject(x)) return;
-    if (!isText(x.type) || !isText(x.user) || !isText(x.ts) || Number.isNaN(Date.parse(x.ts))) add('activities', x.id || `Position ${i + 1}`, 'Aktivität ist unvollständig oder hat ein ungültiges Datum.');
-  });
-  (Array.isArray(data.activityTypes) ? data.activityTypes : []).forEach((x, i) => { if (isObject(x) && !isText(x.label)) add('activityTypes', x.id || `Position ${i + 1}`, 'Bezeichnung fehlt.'); });
   (Array.isArray(data.vacations) ? data.vacations : []).forEach((x, i) => {
     if (!isObject(x) || !isText(x.start) || !isText(x.end) || x.end < x.start) add('vacations', x?.id || `Position ${i + 1}`, 'Urlaubszeitraum ist ungültig.');
   });
@@ -68,8 +63,6 @@ export function cleanData(data) {
   return {
     ...data, rooms, taskDefs, instances,
     shopping: uniqueValid(data.shopping, x => isText(x.name)),
-    activities: uniqueValid(data.activities, x => isText(x.type) && isText(x.user) && isText(x.ts) && !Number.isNaN(Date.parse(x.ts))),
-    activityTypes: uniqueValid(data.activityTypes, x => isText(x.label)),
     vacations: uniqueValid(data.vacations, x => isText(x.start) && isText(x.end) && x.end >= x.start),
     laundry: isObject(data.laundry) ? data.laundry : {},
     balance: isObject(data.balance) ? data.balance : { amount: null, updatedBy: null, updatedAt: null },

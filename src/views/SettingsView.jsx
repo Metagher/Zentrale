@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Plus, Trash2, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import { formatDate } from '../lib/dateUtils.js';
 import { resolveDryerTaskRoomId } from '../lib/laundry.js';
 import { AccentButton, EmptyState, Field, inputCls } from '../components/ui.jsx';
@@ -96,53 +96,6 @@ function DryerTaskSection({ dryerTask, rooms, onSave }) {
   );
 }
 
-function ActivityTypesSection({ activityTypes, onAdd, onDelete }) {
-  const [label, setLabel] = useState('');
-
-  function submit() {
-    if (!label.trim()) return;
-    onAdd(label);
-    setLabel('');
-  }
-
-  return (
-    <div>
-      <SectionHeading>Schnellerfassung</SectionHeading>
-      <p className="text-xs text-zinc-500 mb-3 max-w-xl">
-        Diese Aktivitäten stehen als Buttons oben auf der Übersicht zum schnellen Erfassen bereit
-        und fließen in den Bericht "Haushalt" ein.
-      </p>
-
-      {activityTypes.length === 0 ? (
-        <EmptyState text="Noch keine Aktivitäten definiert." />
-      ) : (
-        <div className="space-y-2 mb-4 max-w-xl">
-          {activityTypes.map(a => (
-            <div key={a.id} className="flex items-center justify-between rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5">
-              <span className="text-sm text-zinc-200 flex items-center gap-2"><Zap size={13} className="text-zinc-500" /> {a.label}</span>
-              <button onClick={() => onDelete(a.id)} className="p-1 rounded-lg hover:bg-red-950 text-zinc-500 hover:text-red-400">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 max-w-xl flex gap-2 items-end">
-        <div className="flex-1">
-          <Field label="Neue Aktivität">
-            <input className={inputCls} value={label} onChange={e => setLabel(e.target.value)}
-              placeholder="z. B. Müll rausbringen" onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-          </Field>
-        </div>
-        <AccentButton small disabled={!label.trim()} onClick={submit}>
-          <Plus size={14} /> Hinzufügen
-        </AccentButton>
-      </div>
-    </div>
-  );
-}
-
 function DataValidationSection({ issues, onCleanup }) {
   return <div>
     <SectionHeading>Datenprüfung</SectionHeading>
@@ -168,7 +121,7 @@ function DataValidationSection({ issues, onCleanup }) {
 }
 
 export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVacation, onDeleteVacation, dryerTask, onSaveDryerTask,
-  activityTypes, onAddActivityType, onDeleteActivityType, dataIssues, onCleanupData }) {
+  dataIssues, onCleanupData }) {
   return (
     <div>
       <div className="mb-6">
@@ -181,7 +134,6 @@ export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVa
         <RoomsView rooms={rooms} instances={instances} onSaveRooms={onSaveRooms} />
         <VacationSection vacations={vacations} onAdd={onAddVacation} onDelete={onDeleteVacation} />
         <DryerTaskSection dryerTask={dryerTask} rooms={rooms} onSave={onSaveDryerTask} />
-        <ActivityTypesSection activityTypes={activityTypes} onAdd={onAddActivityType} onDelete={onDeleteActivityType} />
       </div>
     </div>
   );

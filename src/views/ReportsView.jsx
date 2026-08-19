@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Fan, Sparkles, WashingMachine, Zap } from 'lucide-react';
+import { Fan, Sparkles, WashingMachine } from 'lucide-react';
 import { USERS } from '../constants.js';
 import { formatDate, todayISO, weekStart } from '../lib/dateUtils.js';
 import { monthLabel } from '../lib/laundry.js';
 import { EmptyState, Modal } from '../components/ui.jsx';
 
-export function ReportsView({ rooms, instances, laundry, activities, activityTypes }) {
+export function ReportsView({ rooms, instances, laundry }) {
   const [tab, setTab] = useState('rooms');
   const [detailMachine, setDetailMachine] = useState(null);
 
@@ -31,17 +31,6 @@ export function ReportsView({ rooms, instances, laundry, activities, activityTyp
     return { user: u, total: done.length, thisWeek, recent: done.slice(0, 8) };
   });
 
-  const thisWeekStart = weekStart(todayISO());
-  const activityStats = activityTypes.map(activity => {
-    const events = activities.filter(a => a.type === activity.id);
-    const perUser = Object.values(USERS).map(u => {
-      const userEvents = events.filter(e => e.user === u.name);
-      const thisWeek = userEvents.filter(e => e.ts.slice(0, 10) >= thisWeekStart).length;
-      return { user: u, total: userEvents.length, thisWeek };
-    });
-    return { activity, total: events.length, perUser };
-  });
-
   return (
     <div>
       <div className="mb-4">
@@ -64,11 +53,6 @@ export function ReportsView({ rooms, instances, laundry, activities, activityTyp
           className="px-4 py-1.5 text-xs font-medium rounded-md"
           style={{ backgroundColor: tab === 'laundry' ? 'var(--accent)' : 'transparent', color: tab === 'laundry' ? '#ffffff' : '#a1a1aa' }}>
           Waschstatus
-        </button>
-        <button onClick={() => setTab('household')}
-          className="px-4 py-1.5 text-xs font-medium rounded-md"
-          style={{ backgroundColor: tab === 'household' ? 'var(--accent)' : 'transparent', color: tab === 'household' ? '#ffffff' : '#a1a1aa' }}>
-          Haushalt
         </button>
       </div>
 
@@ -169,36 +153,6 @@ export function ReportsView({ rooms, instances, laundry, activities, activityTyp
             );
           })}
         </div>
-      )}
-
-      {tab === 'household' && (
-        activities.length === 0 ? <EmptyState text="Noch keine Aktivitäten erfasst." /> : (
-          <div className="space-y-3">
-            {activityStats.map(({ activity, total, perUser }) => {
-              return (
-                <div key={activity.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Zap size={16} className="text-zinc-300" />
-                    <span className="font-medium text-sm text-zinc-50">{activity.label}</span>
-                    <span className="text-xs text-zinc-500 ml-auto">{total} gesamt</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {perUser.map(({ user: u, total: userTotal, thisWeek }) => (
-                      <div key={u.name}>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: u.accent }} />
-                          <span className="text-xs text-zinc-400">{u.name}</span>
-                        </div>
-                        <div className="text-xl font-semibold text-zinc-50">{userTotal}</div>
-                        <div className="text-xs text-zinc-500">{thisWeek} diese Woche</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )
       )}
 
       {detailMachine && (() => {
