@@ -9,6 +9,7 @@ import { loadKey, saveKey } from './lib/storage.js';
 import { guard } from './lib/guard.js';
 import { DRYER_TASK_DEF_ID, DRYER_TASK_TITLE_DEFAULT, LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey, resolveDryerTaskRoomId } from './lib/laundry.js';
 import { suppressVacationInstances } from './lib/vacation.js';
+import { cleanData, inspectData } from './lib/dataValidation.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
 import { AccentButton, Field, GhostButton, Modal, Toast, inputCls } from './components/ui.jsx';
@@ -25,7 +26,7 @@ function AppInner() {
   const [supabase, setSupabase] = useState(() => config ? buildClient(config) : null);
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState(null);
-  const [view, setView] = useState('overview');
+  const [view, setView] = useState('tasks');
   const [rooms, setRooms] = useState([]);
   const [taskDefs, setTaskDefs] = useState([]);
   const [instances, setInstances] = useState([]);
@@ -244,6 +245,10 @@ function AppInner() {
   function addTaskDef(data) {
     const { isCleaning, ...rest } = data;
     const def = { ...rest, id: uid(), generatedThrough: null };
+    if (def.household) {
+      persistDefs([...taskDefs, { ...def, recurType: 'once', isTemplate: true, startDate: todayISO(), generatedThrough: todayISO() }]);
+      return;
+    }
     const through = def.recurType === 'once' ? def.startDate : addDays(todayISO(), rollWindowFor(def.recurType));
     // Einmalige Vorlagen erzeugen bewusst keinen Termin beim Anlegen - Termine
     // entstehen dafür ausschließlich über die "Heute"/"Morgen"-Buttons. Sonst
@@ -266,6 +271,11 @@ function AppInner() {
       JSON.stringify(prev.daysOfWeek || []) !== JSON.stringify(rest.daysOfWeek || [])
     );
     const today = todayISO();
+
+    if (rest.household) {
+      persistDefs(taskDefs.map(d => d.id === rest.id ? { ...d, ...rest, recurType: 'once', isTemplate: true } : d));
+      return;
+    }
 
     let nextInstances;
     if (patternChanged && rest.recurType !== 'once') {
@@ -297,6 +307,14 @@ function AppInner() {
 
   function createInstanceFromTemplate(def, dueDate) {
     persistInstances([...instances, makeInstance(def, dueDate)]);
+  }
+  function completeHouseholdTask(def, completedBy) {
+    const now = new Date().toISOString();
+    persistInstances([...instances, { ...makeInstance(def, todayISO()), completed: true, completedAt: now, completedBy }]);
+    setToast(`„${def.title}“ als erledigt erfasst`);
+  }
+  function undoHouseholdCompletion(instance) {
+    persistInstances(instances.filter(i => i.id !== instance.id));
   }
   function deleteTaskDef(def) {
     if (!window.confirm(`Aufgabe "${def.title}" inklusive zukünftiger offener Termine löschen?`)) return;
@@ -358,6 +376,24 @@ function AppInner() {
     persistActivityTypes(activityTypes.filter(t => t.id !== id));
   }
 
+  function cleanupCorruptData() {
+    const current = { rooms, taskDefs, instances, laundry, shopping, balance, activities, activityTypes, vacations };
+    const issueCount = inspectData(current).length;
+    if (!issueCount || !window.confirm(`${issueCount} Datenproblem${issueCount === 1 ? '' : 'e'} wirklich bereinigen? Die betroffenen Einträge werden dauerhaft gelöscht.`)) return;
+    const cleaned = cleanData(current);
+    setRooms(cleaned.rooms);
+    setTaskDefs(cleaned.taskDefs);
+    setInstances(cleaned.instances);
+    setLaundry(cleaned.laundry);
+    setShopping(cleaned.shopping);
+    setBalance(cleaned.balance);
+    setActivities(cleaned.activities);
+    setActivityTypes(cleaned.activityTypes);
+    setVacations(cleaned.vacations);
+    Object.entries(cleaned).forEach(([key, value]) => saveKey(supabase, key, value));
+    setToast('Korrupte Daten wurden bereinigt');
+  }
+
   function quickAdd(title, roomId, dueDate) {
     const def = { id: uid(), title, roomId, recurType: 'once', startDate: dueDate, generatedThrough: dueDate };
     persistDefs([...taskDefs, def]);
@@ -381,6 +417,7 @@ function AppInner() {
   if (!userName) return <Login onLogin={setUserName} onReset={() => { clearConfig(); setConfig(null); setSupabase(null); setReady(false); }} />;
 
   const user = USERS[userName];
+  const dataIssues = inspectData({ rooms, taskDefs, instances, laundry, shopping, balance, activities, activityTypes, vacations });
 
   return (
     <div style={{ '--accent': user.accent, '--accent-ring': user.ring }} className="min-h-screen bg-zinc-950">
@@ -439,8 +476,9 @@ function AppInner() {
               onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate} />
           )}
           {view === 'tasks' && (
-            <TasksView taskDefs={taskDefs} rooms={rooms} onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
-              onCreateFromTemplate={guard(createInstanceFromTemplate, 'Aufgabe erstellen')} />
+            <TasksView taskDefs={taskDefs} instances={instances} rooms={rooms} user={user}
+              onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
+              onComplete={guard(completeHouseholdTask, 'Aufgabe erledigen')} onUndo={guard(undoHouseholdCompletion, 'Erledigung zurücknehmen')} />
           )}
           {view === 'reports' && (
             <ReportsView rooms={rooms} instances={instances} laundry={laundry} activities={activities} activityTypes={activityTypes} />
@@ -460,7 +498,8 @@ function AppInner() {
             <SettingsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')}
               vacations={vacations} onAddVacation={guard(addVacation, 'Urlaub hinzufügen')} onDeleteVacation={guard(deleteVacation, 'Urlaub löschen')}
               dryerTask={laundry.dryerTask} onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')}
-              activityTypes={activityTypes} onAddActivityType={guard(addActivityType, 'Aktivität hinzufügen')} onDeleteActivityType={guard(deleteActivityType, 'Aktivität löschen')} />
+              activityTypes={activityTypes} onAddActivityType={guard(addActivityType, 'Aktivität hinzufügen')} onDeleteActivityType={guard(deleteActivityType, 'Aktivität löschen')}
+              dataIssues={dataIssues} onCleanupData={guard(cleanupCorruptData, 'Daten bereinigen')} />
           )}
         </main>
       </div>

@@ -17,8 +17,8 @@ export const DEFAULT_ACTIVITY_TYPES = [
 ];
 
 export const NAV_ITEMS = [
-  { id: 'overview', label: 'Übersicht', icon: Home },
-  { id: 'tasks', label: 'Aufgaben', icon: ListChecks },
+  { id: 'tasks', label: 'Haushalt', icon: ListChecks },
+  { id: 'overview', label: 'Planung', icon: Home },
   { id: 'calendar', label: 'Kalender', icon: Calendar },
   { id: 'laundry', label: 'Waschstatus', shortLabel: 'Wäsche', icon: WashingMachine },
   { id: 'shopping', label: 'Einkaufen', icon: ShoppingCart },

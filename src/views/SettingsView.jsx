@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, Trash2, Zap } from 'lucide-react';
 import { formatDate } from '../lib/dateUtils.js';
 import { resolveDryerTaskRoomId } from '../lib/laundry.js';
 import { AccentButton, EmptyState, Field, inputCls } from '../components/ui.jsx';
@@ -143,8 +143,32 @@ function ActivityTypesSection({ activityTypes, onAdd, onDelete }) {
   );
 }
 
+function DataValidationSection({ issues, onCleanup }) {
+  return <div>
+    <SectionHeading>Datenprüfung</SectionHeading>
+    <p className="text-xs text-zinc-500 mb-3 max-w-xl">Prüft alle gespeicherten Daten und Verknüpfungen auf ungültige oder unvollständige Einträge.</p>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 max-w-xl">
+      {issues.length === 0 ? <div className="flex items-center gap-2 text-sm text-emerald-400">
+        <CheckCircle2 size={17} /> Keine beschädigten Daten gefunden.
+      </div> : <>
+        <div className="flex items-center gap-2 text-sm font-medium text-amber-400 mb-3">
+          <AlertTriangle size={17} /> {issues.length} Datenproblem{issues.length === 1 ? '' : 'e'} gefunden
+        </div>
+        <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+          {issues.map((issue, index) => <div key={`${issue.collection}-${issue.id}-${index}`} className="rounded-lg bg-zinc-800 px-3 py-2 text-xs">
+            <div className="text-zinc-200 font-medium">{issue.collection} · {issue.id}</div>
+            <div className="text-zinc-500 mt-0.5">{issue.message}</div>
+          </div>)}
+        </div>
+        <AccentButton small onClick={onCleanup}><Trash2 size={14} /> Korrupte Daten löschen</AccentButton>
+        <p className="text-[11px] text-zinc-600 mt-2">Es werden ausschließlich beanstandete Einträge entfernt oder ungültige Bereiche zurückgesetzt.</p>
+      </>}
+    </div>
+  </div>;
+}
+
 export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVacation, onDeleteVacation, dryerTask, onSaveDryerTask,
-  activityTypes, onAddActivityType, onDeleteActivityType }) {
+  activityTypes, onAddActivityType, onDeleteActivityType, dataIssues, onCleanupData }) {
   return (
     <div>
       <div className="mb-6">
@@ -153,6 +177,7 @@ export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVa
       </div>
 
       <div className="space-y-8">
+        <DataValidationSection issues={dataIssues} onCleanup={onCleanupData} />
         <RoomsView rooms={rooms} instances={instances} onSaveRooms={onSaveRooms} />
         <VacationSection vacations={vacations} onAdd={onAddVacation} onDelete={onDeleteVacation} />
         <DryerTaskSection dryerTask={dryerTask} rooms={rooms} onSave={onSaveDryerTask} />
