@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileDown, Plus, QrCode, Trash2 } from 'lucide-react';
 import { formatDate } from '../lib/dateUtils.js';
 import { AccentButton, EmptyState, Field, inputCls } from '../components/ui.jsx';
 import { RoomsView } from './RoomsView.jsx';
@@ -83,8 +83,20 @@ function DataValidationSection({ issues, onCleanup }) {
   </div>;
 }
 
+function QrExportSection({ taskCount, onExport }) {
+  return <div>
+    <SectionHeading>QR-Codes für Haushaltsaufgaben</SectionHeading>
+    <p className="text-xs text-zinc-500 mb-3 max-w-xl">Jeder QR-Code gehört dauerhaft zu einer Aufgabe: einmal ausdrucken und aufkleben, danach beliebig oft scannen. Bei jedem Scan wird nur gefragt, wer sie diesmal erledigt hat.</p>
+    <button onClick={onExport} disabled={!taskCount} className="w-full max-w-xl min-h-14 rounded-xl border border-zinc-800 bg-zinc-900 px-4 flex items-center gap-3 text-left disabled:opacity-40 active:scale-[.99]">
+      <span className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center" style={{ color: 'var(--accent)' }}><QrCode size={19} /></span>
+      <span className="flex-1"><span className="block text-sm font-medium text-zinc-100">QR-Dokument erstellen</span><span className="block text-xs text-zinc-500 mt-0.5">{taskCount} Aufgabe{taskCount === 1 ? '' : 'n'} · drucken oder als PDF sichern</span></span>
+      <FileDown size={17} className="text-zinc-500" />
+    </button>
+  </div>;
+}
+
 export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVacation, onDeleteVacation,
-  dataIssues, onCleanupData }) {
+  dataIssues, onCleanupData, householdTaskCount, onExportQRCodes }) {
   return (
     <div>
       <div className="mb-6">
@@ -95,6 +107,7 @@ export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVa
       <div className="space-y-8">
         <DataValidationSection issues={dataIssues} onCleanup={onCleanupData} />
         <RoomsView rooms={rooms} instances={instances} onSaveRooms={onSaveRooms} />
+        <QrExportSection taskCount={householdTaskCount} onExport={onExportQRCodes} />
         <VacationSection vacations={vacations} onAdd={onAddVacation} onDelete={onDeleteVacation} />
       </div>
     </div>

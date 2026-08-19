@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Home, LogOut, RefreshCw } from 'lucide-react';
+import QRCode from 'qrcode';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
 import SetupScreen from './SetupScreen.jsx';
 import { USERS, NAV_ITEMS } from './constants.js';
@@ -33,6 +34,7 @@ function AppInner() {
   const [onlyMine, setOnlyMine] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [qrTaskId, setQrTaskId] = useState(() => new URLSearchParams(window.location.search).get('completeTask'));
   const instancesRef = useRef(instances);
   const userNameRef = useRef(userName);
 
@@ -335,6 +337,27 @@ function AppInner() {
     }]);
   }
 
+  async function exportHouseholdQRCodes() {
+    const tasks = taskDefs.filter(def => def.household);
+    if (!tasks.length) return setToast('Keine Haushaltsaufgaben für den Export vorhanden');
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return setToast('Bitte Pop-ups für den QR-Export erlauben');
+    printWindow.document.write('<p style="font-family:system-ui;padding:24px">QR-Dokument wird erstellt…</p>');
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    const escapeHtml = value => String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    const cards = await Promise.all(tasks.map(async task => {
+      const url = `${baseUrl}?completeTask=${encodeURIComponent(task.id)}`;
+      const image = await QRCode.toDataURL(url, { width: 420, margin: 2, errorCorrectionLevel: 'M' });
+      const room = rooms.find(item => item.id === task.roomId)?.name || '';
+      return `<article><img src="${image}" alt="QR-Code"><h2>${escapeHtml(task.title)}</h2><p>${escapeHtml(room)}</p></article>`;
+    }));
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>QR-Codes Haushaltsaufgaben</title><style>
+      @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111;margin:0}header{margin-bottom:8mm}h1{font-size:22px;margin:0 0 4px}header p{margin:0;color:#666;font-size:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8mm}article{border:1px solid #bbb;border-radius:12px;padding:8mm;text-align:center;break-inside:avoid;min-height:118mm;display:flex;flex-direction:column;align-items:center;justify-content:center}article img{width:62mm;height:62mm}h2{font-size:18px;margin:5mm 0 1mm}article p{font-size:13px;color:#666;margin:0}.print{position:fixed;right:16px;top:16px;padding:10px 16px;border:0;border-radius:8px;background:#111;color:white}@media print{.print{display:none}}
+    </style></head><body><button class="print" onclick="window.print()">Drucken / PDF</button><header><h1>Haushaltsaufgaben</h1><p>Einmal aufkleben, beliebig oft verwenden: QR-Code scannen, Person auswählen und Aufgabe erledigen.</p></header><main class="grid">${cards.join('')}</main></body></html>`);
+    printWindow.document.close();
+  }
+
   if (!config || !supabase) {
     return (
       <SetupScreen
@@ -348,6 +371,18 @@ function AppInner() {
     );
   }
   if (!ready) return <div className="min-h-screen bg-zinc-950" />;
+  if (qrTaskId) {
+    const qrTask = taskDefs.find(def => def.id === qrTaskId && def.household);
+    return <QrCompletionScreen task={qrTask} onComplete={name => {
+      if (qrTask) completeHouseholdTask(qrTask, name);
+      window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash}`);
+      setQrTaskId(null);
+      setUserName(name);
+    }} onCancel={() => {
+      window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash}`);
+      setQrTaskId(null);
+    }} />;
+  }
   if (!userName) return <Login onLogin={setUserName} onReset={() => { clearConfig(); setConfig(null); setSupabase(null); setReady(false); }} />;
 
   const user = USERS[userName];
@@ -424,7 +459,8 @@ function AppInner() {
           {view === 'settings' && (
             <SettingsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')}
               vacations={vacations} onAddVacation={guard(addVacation, 'Urlaub hinzufügen')} onDeleteVacation={guard(deleteVacation, 'Urlaub löschen')}
-              dataIssues={dataIssues} onCleanupData={guard(cleanupCorruptData, 'Daten bereinigen')} />
+              dataIssues={dataIssues} onCleanupData={guard(cleanupCorruptData, 'Daten bereinigen')}
+              householdTaskCount={taskDefs.filter(def => def.household).length} onExportQRCodes={guard(exportHouseholdQRCodes, 'QR-Codes exportieren')} />
           )}
         </main>
       </div>
@@ -452,6 +488,23 @@ function AppInner() {
       <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
+}
+
+function QrCompletionScreen({ task, onComplete, onCancel }) {
+  return <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className="text-xs text-zinc-500 mb-2">QR-Aufgabe</div>
+      {task ? <>
+        <h1 className="text-xl font-semibold text-zinc-50 mb-1">{task.title}</h1>
+        <p className="text-sm text-zinc-400 mb-5">Wer hat diese Aufgabe erledigt?</p>
+        <div className="space-y-3">{Object.values(USERS).map(person => <button key={person.name} onClick={() => onComplete(person.name)}
+          className="w-full min-h-14 rounded-xl text-white font-medium flex items-center justify-center gap-2 active:scale-[.98]" style={{ backgroundColor: person.accent }}>
+          <span className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">{person.name[0]}</span>{person.name}
+        </button>)}</div>
+      </> : <><h1 className="text-lg font-semibold text-zinc-50">Aufgabe nicht gefunden</h1><p className="text-sm text-zinc-500 mt-2 mb-4">Der QR-Code gehört zu keiner aktuellen Haushaltsaufgabe.</p></>}
+      <button onClick={onCancel} className="w-full min-h-11 mt-4 text-sm text-zinc-500">Abbrechen</button>
+    </div>
+  </div>;
 }
 
 function QuickAddModal({ date, rooms, onCancel, onSave }) {
