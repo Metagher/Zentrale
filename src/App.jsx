@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cake, Home, LogOut, RefreshCw } from 'lucide-react';
 import QRCode from 'qrcode';
 import { getStoredConfig, saveConfig, clearConfig, buildClient } from './supabase.js';
@@ -39,8 +39,6 @@ function AppInner() {
   const [qrTaskId, setQrTaskId] = useState(() => new URLSearchParams(window.location.search).get('completeTask'));
   const instancesRef = useRef(instances);
   const userNameRef = useRef(userName);
-  const birthdayCheckedRef = useRef(false);
-  const [birthdayPopup, setBirthdayPopup] = useState([]);
 
   useEffect(() => { instancesRef.current = instances; }, [instances]);
   useEffect(() => { userNameRef.current = userName; }, [userName]);
@@ -52,9 +50,7 @@ function AppInner() {
   }, [toast]);
 
   useEffect(() => { if (supabase) load(); }, [supabase]);
-  useEffect(() => {
-    if (!ready || !userName || birthdayCheckedRef.current) return;
-    birthdayCheckedRef.current = true;
+  const weeklyBirthdays = useMemo(() => {
     const start = weekStart(todayISO());
     const dates = Array.from({ length: 7 }, (_, index) => addDays(start, index));
     const upcoming = [];
@@ -63,8 +59,8 @@ function AppInner() {
         upcoming.push({ person, date, age: Number(date.slice(0, 4)) - Number(person.birthday.slice(0, 4)) });
       }
     }));
-    if (upcoming.length) setBirthdayPopup(upcoming.sort((a, b) => a.date.localeCompare(b.date)));
-  }, [ready, userName, people]);
+    return upcoming.sort((a, b) => a.date.localeCompare(b.date));
+  }, [people]);
   useEffect(() => {
     if (!supabase || !userName) return;
     const id = setInterval(() => { load(); }, 30000);
@@ -445,6 +441,8 @@ function AppInner() {
         </div>
       </header>
 
+      {weeklyBirthdays.length > 0 && <BirthdayBanner birthdays={weeklyBirthdays} />}
+
       <div className="max-w-5xl mx-auto md:flex">
         <nav className="hidden md:flex flex-col gap-1 w-52 shrink-0 px-4 py-6" style={{ alignSelf: 'flex-start' }}>
           {NAV_ITEMS.map(item => {
@@ -516,7 +514,6 @@ function AppInner() {
       {quickAddDate && (
         <QuickAddModal date={quickAddDate} rooms={rooms} onCancel={() => setQuickAddDate(null)} onSave={guard(quickAdd, 'Aufgabe anlegen')} />
       )}
-      {birthdayPopup.length > 0 && <BirthdayPopup birthdays={birthdayPopup} onClose={() => setBirthdayPopup([])} />}
       <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );
@@ -539,14 +536,15 @@ function QrCompletionScreen({ task, onComplete, onCancel }) {
   </div>;
 }
 
-function BirthdayPopup({ birthdays, onClose }) {
-  return <Modal title="Geburtstage diese Woche" onClose={onClose}>
-    <div className="space-y-2">{birthdays.map(({ person, date, age }) => <div key={`${person.id}-${date}`} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 flex items-center gap-3">
-      <span className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--accent)', color: '#fff' }}><Cake size={18} /></span>
-      <div><div className="text-sm font-medium text-zinc-50">{person.name}</div><div className="text-xs text-zinc-500 mt-0.5">{formatDate(date)} · wird {age} Jahre · Jahrgang {person.birthday.slice(0, 4)}</div></div>
-    </div>)}</div>
-    <AccentButton onClick={onClose} className="w-full mt-4">Verstanden</AccentButton>
-  </Modal>;
+function BirthdayBanner({ birthdays }) {
+  return <div className="max-w-5xl mx-auto px-4 md:px-8 pt-3">
+    <div className="rounded-xl border border-fuchsia-900/50 bg-fuchsia-950/20 px-3 py-2.5 flex items-start gap-2.5">
+      <Cake size={16} className="text-fuchsia-400 shrink-0 mt-0.5" />
+      <div className="min-w-0"><div className="text-xs font-medium text-fuchsia-300">Geburtstag diese Woche</div>
+        <div className="text-xs text-zinc-400 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">{birthdays.map(({ person, date, age }) => <span key={`${person.id}-${date}`}><strong className="text-zinc-200">{person.name}</strong> · {formatDate(date)} · {age} Jahre</span>)}</div>
+      </div>
+    </div>
+  </div>;
 }
 
 function QuickAddModal({ date, rooms, onCancel, onSave }) {
