@@ -16,6 +16,7 @@ import { CalendarView } from './views/CalendarView.jsx';
 import { TasksView } from './views/TasksView.jsx';
 import { OneTimeTasksView } from './views/OneTimeTasksView.jsx';
 import { PeopleView } from './views/PeopleView.jsx';
+import { HouseholdReportsView } from './views/HouseholdReportsView.jsx';
 import { ShoppingView } from './views/ShoppingView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
 
@@ -30,6 +31,7 @@ function AppInner() {
   const [instances, setInstances] = useState([]);
   const [shopping, setShopping] = useState([]);
   const [people, setPeople] = useState([]);
+  const [appOpens, setAppOpens] = useState([]);
   const [balance, setBalance] = useState({ amount: null, updatedBy: null, updatedAt: null });
   const [vacations, setVacations] = useState([]);
   const [quickAddDate, setQuickAddDate] = useState(null);
@@ -164,6 +166,7 @@ function AppInner() {
 
     const s = await loadKey(supabase, 'shopping', []);
     const p = await loadKey(supabase, 'people', []);
+    const opens = await loadKey(supabase, 'appOpens', []);
     const b = await loadKey(supabase, 'balance', { amount: null, updatedBy: null, updatedAt: null });
 
     setRooms(r);
@@ -171,6 +174,7 @@ function AppInner() {
     setInstances(cleanedInstances);
     setShopping(s);
     setPeople(p);
+    setAppOpens(opens);
     setBalance(b);
     setVacations(v);
     setReady(true);
@@ -324,6 +328,23 @@ function AppInner() {
     if (!window.confirm(`Person "${person.name}" löschen?`)) return;
     persistPeople(people.filter(item => item.id !== person.id));
   }
+  function recordAppOpen(name, source = 'app') {
+    const marker = `zuhause_open_${name}`;
+    try {
+      if (window.sessionStorage.getItem(marker)) return;
+      window.sessionStorage.setItem(marker, '1');
+    } catch { /* sessionStorage kann in privaten Browsermodi eingeschränkt sein. */ }
+    const event = { id: uid(), person: name, openedAt: new Date().toISOString(), source };
+    setAppOpens(current => {
+      const next = [...current, event];
+      saveKey(supabase, 'appOpens', next);
+      return next;
+    });
+  }
+  function login(name) {
+    recordAppOpen(name, 'app');
+    setUserName(name);
+  }
 
   function saveBalance(amount) {
     const next = { amount, updatedBy: user.name, updatedAt: new Date().toISOString() };
@@ -332,7 +353,7 @@ function AppInner() {
   }
 
   function cleanupCorruptData() {
-    const current = { rooms, taskDefs, instances, shopping, people, balance, vacations };
+    const current = { rooms, taskDefs, instances, shopping, people, appOpens, balance, vacations };
     const issueCount = inspectData(current).length;
     if (!issueCount || !window.confirm(`${issueCount} Datenproblem${issueCount === 1 ? '' : 'e'} wirklich bereinigen? Die betroffenen Einträge werden dauerhaft gelöscht.`)) return;
     const cleaned = cleanData(current);
@@ -341,6 +362,7 @@ function AppInner() {
     setInstances(cleaned.instances);
     setShopping(cleaned.shopping);
     setPeople(cleaned.people);
+    setAppOpens(cleaned.appOpens);
     setBalance(cleaned.balance);
     setVacations(cleaned.vacations);
     Object.entries(cleaned).forEach(([key, value]) => saveKey(supabase, key, value));
@@ -399,6 +421,7 @@ function AppInner() {
     const qrTask = taskDefs.find(def => def.id === qrTaskId && def.household);
     return <QrCompletionScreen task={qrTask} onComplete={name => {
       if (qrTask) completeHouseholdTask(qrTask, name);
+      recordAppOpen(name, 'qr');
       window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash}`);
       setQrTaskId(null);
       setUserName(name);
@@ -407,10 +430,10 @@ function AppInner() {
       setQrTaskId(null);
     }} />;
   }
-  if (!userName) return <Login onLogin={setUserName} onReset={() => { clearConfig(); setConfig(null); setSupabase(null); setReady(false); }} />;
+  if (!userName) return <Login onLogin={login} onReset={() => { clearConfig(); setConfig(null); setSupabase(null); setReady(false); }} />;
 
   const user = USERS[userName];
-  const dataIssues = inspectData({ rooms, taskDefs, instances, shopping, people, balance, vacations });
+  const dataIssues = inspectData({ rooms, taskDefs, instances, shopping, people, appOpens, balance, vacations });
 
   return (
     <div style={{ '--accent': user.accent, '--accent-ring': user.ring }} className="min-h-screen bg-zinc-950">
@@ -471,6 +494,7 @@ function AppInner() {
           {view === 'people' && (
             <PeopleView people={people} onAdd={guard(addPerson, 'Person hinzufügen')} onEdit={guard(editPerson, 'Person speichern')} onDelete={guard(deletePerson, 'Person löschen')} />
           )}
+          {view === 'reports' && <HouseholdReportsView taskDefs={taskDefs} instances={instances} appOpens={appOpens} />}
           {view === 'tasks' && (
             <TasksView taskDefs={taskDefs} instances={instances} rooms={rooms} vacations={vacations} user={user}
               onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}

@@ -1,5 +1,5 @@
 import {
-  CircleCheckBig, Calendar, ListChecks, ShoppingCart, Settings, UsersRound,
+  BarChart3, CircleCheckBig, Calendar, ListChecks, ShoppingCart, Settings, UsersRound,
 } from 'lucide-react';
 
 export const USERS = {
@@ -12,6 +12,7 @@ export const NAV_ITEMS = [
   { id: 'oneTime', label: 'Einmalig', icon: CircleCheckBig },
   { id: 'calendar', label: 'Kalender', icon: Calendar },
   { id: 'people', label: 'Personen', icon: UsersRound },
+  { id: 'reports', label: 'Bericht', icon: BarChart3 },
   { id: 'shopping', label: 'Einkaufen', icon: ShoppingCart },
   { id: 'settings', label: 'Einstellungen', shortLabel: 'Mehr', icon: Settings },
 ];

@@ -4,7 +4,7 @@ const isText = value => typeof value === 'string' && value.trim().length > 0;
 export function inspectData(data) {
   const issues = [];
   const add = (collection, id, message) => issues.push({ collection, id: id || 'unbekannt', message });
-  const arrays = ['rooms', 'taskDefs', 'instances', 'shopping', 'people', 'vacations'];
+  const arrays = ['rooms', 'taskDefs', 'instances', 'shopping', 'people', 'appOpens', 'vacations'];
   arrays.forEach(key => { if (!Array.isArray(data[key])) add(key, 'gesamter Bereich', 'Gespeicherter Wert ist keine Liste.'); });
 
   const rooms = Array.isArray(data.rooms) ? data.rooms : [];
@@ -44,6 +44,10 @@ export function inspectData(data) {
     if (!isObject(x)) return;
     if (!isText(x.name) || !/^\d{4}-\d{2}-\d{2}$/.test(x.birthday || '') || Number.isNaN(Date.parse(`${x.birthday}T00:00:00`))) add('people', x.id || `Position ${i + 1}`, 'Name oder Geburtstag ist ungültig.');
   });
+  (Array.isArray(data.appOpens) ? data.appOpens : []).forEach((x, i) => {
+    if (!isObject(x)) return;
+    if (!isText(x.person) || !isText(x.openedAt) || Number.isNaN(Date.parse(x.openedAt)) || !['app', 'qr'].includes(x.source)) add('appOpens', x.id || `Position ${i + 1}`, 'App-Öffnung ist unvollständig oder ungültig.');
+  });
   (Array.isArray(data.vacations) ? data.vacations : []).forEach((x, i) => {
     if (!isObject(x) || !isText(x.start) || !isText(x.end) || x.end < x.start) add('vacations', x?.id || `Position ${i + 1}`, 'Urlaubszeitraum ist ungültig.');
   });
@@ -70,6 +74,7 @@ export function cleanData(data) {
     ...data, rooms, taskDefs, instances,
     shopping: uniqueValid(data.shopping, x => isText(x.name)),
     people: uniqueValid(data.people, x => isText(x.name) && /^\d{4}-\d{2}-\d{2}$/.test(x.birthday || '') && !Number.isNaN(Date.parse(`${x.birthday}T00:00:00`))),
+    appOpens: uniqueValid(data.appOpens, x => isText(x.person) && isText(x.openedAt) && !Number.isNaN(Date.parse(x.openedAt)) && ['app', 'qr'].includes(x.source)),
     vacations: uniqueValid(data.vacations, x => isText(x.start) && isText(x.end) && x.end >= x.start),
     balance: isObject(data.balance) ? data.balance : { amount: null, updatedBy: null, updatedAt: null },
   };
