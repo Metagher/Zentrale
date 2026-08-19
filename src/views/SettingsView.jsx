@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import { formatDate } from '../lib/dateUtils.js';
-import { resolveDryerTaskRoomId } from '../lib/laundry.js';
 import { AccentButton, EmptyState, Field, inputCls } from '../components/ui.jsx';
 import { RoomsView } from './RoomsView.jsx';
 
@@ -26,8 +25,8 @@ function VacationSection({ vacations, onAdd, onDelete }) {
     <div>
       <SectionHeading>Urlaub</SectionHeading>
       <p className="text-xs text-zinc-500 mb-3 max-w-xl">
-        In diesen Zeiträumen werden keine neuen Termine für wiederkehrende Aufgaben erzeugt,
-        und bereits geplante, noch nicht erledigte Termine in diesem Zeitraum werden ausgesetzt.
+        Diese Tage werden bei Haushaltsaufgaben übersprungen. Sie zählen nicht für die
+        Bewertung als Super, Okay oder zu lange. Einmalige Termine bleiben unverändert.
       </p>
 
       {sorted.length > 0 && (
@@ -60,42 +59,6 @@ function VacationSection({ vacations, onAdd, onDelete }) {
   );
 }
 
-function DryerTaskSection({ dryerTask, rooms, onSave }) {
-  const [title, setTitle] = useState(dryerTask?.title || '');
-  const [roomId, setRoomId] = useState(() => resolveDryerTaskRoomId(dryerTask, rooms));
-  const [saved, setSaved] = useState(false);
-
-  function submit() {
-    onSave({ title: title.trim(), roomId });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  }
-
-  return (
-    <div>
-      <SectionHeading>Waschstatus: Automatische Aufgabe</SectionHeading>
-      <p className="text-xs text-zinc-500 mb-3 max-w-xl">Wird angelegt, sobald der Trockner auf "Fertig" gestellt wird.</p>
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 max-w-xl">
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Titel">
-            <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="z. B. Wäsche falten und verräumen" />
-          </Field>
-          <Field label="Raum">
-            <select className={inputCls} value={roomId} onChange={e => setRoomId(e.target.value)} disabled={rooms.length === 0}>
-              {rooms.length === 0 && <option value="">Kein Raum vorhanden</option>}
-              {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="flex items-center gap-3 mt-1">
-          <AccentButton small disabled={!title.trim() || !roomId} onClick={submit}>Speichern</AccentButton>
-          {saved && <span className="text-xs text-emerald-400">Gespeichert</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function DataValidationSection({ issues, onCleanup }) {
   return <div>
     <SectionHeading>Datenprüfung</SectionHeading>
@@ -120,7 +83,7 @@ function DataValidationSection({ issues, onCleanup }) {
   </div>;
 }
 
-export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVacation, onDeleteVacation, dryerTask, onSaveDryerTask,
+export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVacation, onDeleteVacation,
   dataIssues, onCleanupData }) {
   return (
     <div>
@@ -133,7 +96,6 @@ export function SettingsView({ rooms, instances, onSaveRooms, vacations, onAddVa
         <DataValidationSection issues={dataIssues} onCleanup={onCleanupData} />
         <RoomsView rooms={rooms} instances={instances} onSaveRooms={onSaveRooms} />
         <VacationSection vacations={vacations} onAdd={onAddVacation} onDelete={onDeleteVacation} />
-        <DryerTaskSection dryerTask={dryerTask} rooms={rooms} onSave={onSaveDryerTask} />
       </div>
     </div>
   );

@@ -35,14 +35,14 @@ export function TaskCard({ instance, room, rooms, user, onUpdate, onDelete, comp
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-zinc-50 text-sm">{instance.title}</span>
-            {!compact && (
+            {!compact && room && (
               <span className="text-xs text-zinc-500 flex items-center gap-1">
                 <MapPin size={11} /> {room ? room.name : '–'}
               </span>
             )}
           </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-zinc-400">
-            {compact && <span className="flex items-center gap-1"><MapPin size={12} /> {room ? room.name : '–'}</span>}
+            {compact && room && <span className="flex items-center gap-1"><MapPin size={12} /> {room.name}</span>}
             {assignedUser ? (
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: assignedUser.accent }} />
@@ -85,7 +85,7 @@ export function TaskCard({ instance, room, rooms, user, onUpdate, onDelete, comp
 
       <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-zinc-800">
         <button onClick={() => setEditing(v => !v)} className="text-xs text-zinc-500 hover:text-zinc-200 flex items-center gap-1">
-          <Pencil size={11} /> Verschieben
+          <Pencil size={11} /> Bearbeiten
         </button>
         <button onClick={() => setShowComments(v => !v)} className="text-xs text-zinc-500 hover:text-zinc-200 flex items-center gap-1">
           <MessageSquare size={11} /> Kommentare {instance.comments?.length ? `(${instance.comments.length})` : ''}
@@ -99,6 +99,7 @@ export function TaskCard({ instance, room, rooms, user, onUpdate, onDelete, comp
         <div className="mt-3 grid grid-cols-2 gap-2 items-end">
           <select className={inputCls + ' col-span-2'} value={form.roomId}
             onChange={e => setForm(f => ({ ...f, roomId: e.target.value }))}>
+            <option value="">Kein Raum</option>
             {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
           <input type="date" className={inputCls} value={form.dueDate}

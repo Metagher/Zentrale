@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Check, History, Pencil, Plus, Trash2, TrendingUp } from 'lucide-react';
-import { formatDateTime } from '../lib/dateUtils.js';
+import { addDays, formatDateTime, todayISO } from '../lib/dateUtils.js';
+import { isDateInVacation } from '../lib/vacation.js';
 import { AccentButton, EmptyState, Field, GhostButton, Modal, inputCls } from '../components/ui.jsx';
 
 function TaskForm({ initial, rooms, onCancel, onSave }) {
@@ -27,71 +28,81 @@ function TaskForm({ initial, rooms, onCancel, onSave }) {
   </Modal>;
 }
 
-function taskAge(task, completion) {
+function taskAge(task, completion, vacations) {
   const reference = completion?.completedAt || task.createdAt || `${task.startDate || new Date().toISOString().slice(0, 10)}T00:00:00`;
-  return Math.max(0, (Date.now() - new Date(reference).getTime()) / 86400000);
+  const start = reference.slice(0, 10);
+  const today = todayISO();
+  let days = 0;
+  for (let cursor = addDays(start, 1); cursor <= today; cursor = addDays(cursor, 1)) {
+    if (!isDateInVacation(cursor, vacations)) days += 1;
+  }
+  return days;
 }
 
-function taskStatus(task, completion) {
-  const age = taskAge(task, completion);
+function taskStatus(task, completion, vacations) {
+  const age = taskAge(task, completion, vacations);
   if (age <= (task.greenDays ?? 3)) return 'green';
   if (age <= (task.yellowDays ?? 7)) return 'yellow';
   return 'red';
 }
 
-function ageLabel(iso) {
-  if (!iso) return 'Noch nie erledigt';
-  const days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+function ageLabel(iso, days) {
+  if (!iso) return days ? `Noch nie erledigt · seit ${days} Tagen` : 'Noch nie erledigt';
   if (days === 0) return 'Heute erledigt';
   if (days === 1) return 'Seit gestern nicht erledigt';
   return `Seit ${days} Tagen nicht erledigt`;
 }
 
-function HouseholdStatus({ tasks, completionByDef }) {
-  const stats = useMemo(() => {
-    const statuses = tasks.map(task => taskStatus(task, completionByDef[task.id]));
-    return {
-      current: statuses.filter(status => status === 'green').length,
-      soon: statuses.filter(status => status === 'yellow').length,
-      overdue: statuses.filter(status => status === 'red').length,
+function HouseholdStatus({ tasks, rooms, completionByDef, vacations }) {
+  const { stats, roomStats } = useMemo(() => {
+    const calculate = list => {
+      const statuses = list.map(task => taskStatus(task, completionByDef[task.id], vacations));
+      const result = {
+        total: list.length,
+        current: statuses.filter(status => status === 'green').length,
+        soon: statuses.filter(status => status === 'yellow').length,
+        overdue: statuses.filter(status => status === 'red').length,
+      };
+      const colors = [[16, 185, 129], [245, 158, 11], [239, 68, 68]];
+      const counts = [result.current, result.soon, result.overdue];
+      const mixed = colors[0].map((_, channel) => Math.round(colors.reduce((sum, color, index) => sum + color[channel] * counts[index], 0) / Math.max(1, result.total)));
+      return { ...result, color: `rgb(${mixed.join(',')})` };
     };
-  }, [tasks, completionByDef]);
+    return {
+      stats: calculate(tasks),
+      roomStats: rooms.map(room => ({ room, ...calculate(tasks.filter(task => task.roomId === room.id)) })).filter(item => item.total),
+    };
+  }, [tasks, rooms, completionByDef, vacations]);
   if (!tasks.length) return null;
-  const width = count => `${(count / tasks.length) * 100}%`;
-  const colors = [[16, 185, 129], [245, 158, 11], [239, 68, 68]];
-  const counts = [stats.current, stats.soon, stats.overdue];
-  const mixed = colors[0].map((_, channel) => Math.round(colors.reduce((sum, color, index) => sum + color[channel] * counts[index], 0) / tasks.length));
-  const mixedColor = `rgb(${mixed.join(',')})`;
+  const segments = item => <div className="h-1.5 flex overflow-hidden rounded-full bg-zinc-800">
+    {item.current > 0 && <span className="bg-emerald-500" style={{ width: `${item.current / item.total * 100}%` }} />}
+    {item.soon > 0 && <span className="bg-amber-500" style={{ width: `${item.soon / item.total * 100}%` }} />}
+    {item.overdue > 0 && <span className="bg-red-500" style={{ width: `${item.overdue / item.total * 100}%` }} />}
+  </div>;
 
-  return <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 mb-6">
-    <div className="flex items-center justify-between gap-4">
+  return <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 mb-5">
+    <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-full border-4 border-zinc-800 shadow-inner shrink-0" style={{ backgroundColor: mixedColor, boxShadow: `0 0 18px ${mixedColor}55` }} />
+        <div className="w-7 h-7 rounded-full border-2 border-zinc-800 shrink-0" style={{ backgroundColor: stats.color }} />
         <div>
-        <div className="text-xs text-zinc-500 flex items-center gap-1.5"><TrendingUp size={13} /> Haushaltsstatus</div>
-        <div className="text-lg font-semibold mt-0.5" style={{ color: mixedColor }}>Gesamtzustand</div>
-        <div className="text-xs text-zinc-500">Mischung aus allen Aufgaben</div>
+        <div className="text-xs text-zinc-500 flex items-center gap-1.5"><TrendingUp size={12} /> Gesamt</div>
+        <div className="text-sm font-semibold" style={{ color: stats.color }}>{stats.total} Aufgaben</div>
         </div>
       </div>
-      <div className="text-right shrink-0">
-        <div className="text-lg font-semibold text-zinc-100">{tasks.length}</div>
-        <div className="text-[11px] text-zinc-500">Aufgaben</div>
-      </div>
+      <div className="text-[11px] text-zinc-500 flex gap-2"><span className="text-emerald-400">● {stats.current}</span><span className="text-amber-400">● {stats.soon}</span><span className="text-red-400">● {stats.overdue}</span></div>
     </div>
-    <div className="h-2.5 flex overflow-hidden rounded-full bg-zinc-800 mt-4" aria-label="Aktualität der Haushaltsaufgaben">
-      {stats.current > 0 && <span className="bg-emerald-500" style={{ width: width(stats.current) }} />}
-      {stats.soon > 0 && <span className="bg-amber-500" style={{ width: width(stats.soon) }} />}
-      {stats.overdue > 0 && <span className="bg-red-500" style={{ width: width(stats.overdue) }} />}
-    </div>
-    <div className="grid grid-cols-3 gap-2 mt-3 text-[11px]">
-      <div className="text-zinc-500"><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" />Aktuell <strong className="text-zinc-300">{stats.current}</strong></div>
-      <div className="text-zinc-500 text-center"><span className="inline-block w-2 h-2 rounded-full bg-amber-500 mr-1" />Bald <strong className="text-zinc-300">{stats.soon}</strong></div>
-      <div className="text-zinc-500 text-right"><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />Lange <strong className="text-zinc-300">{stats.overdue}</strong></div>
+    <div className="mt-2">{segments(stats)}</div>
+    <div className="flex gap-2 overflow-x-auto mt-3 pb-0.5 -mx-1 px-1">
+      {roomStats.map(item => <div key={item.room.id} className="min-w-[132px] rounded-lg bg-zinc-950/60 border border-zinc-800 px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2 mb-1.5"><span className="text-xs text-zinc-300 truncate">{item.room.name}</span><span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} /></div>
+        {segments(item)}
+        <div className="text-[10px] text-zinc-600 mt-1.5">{item.current} / {item.soon} / {item.overdue}</div>
+      </div>)}
     </div>
   </div>;
 }
 
-export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDef, onDeleteDef, onComplete, onUndo }) {
+export function TasksView({ taskDefs, instances, rooms, vacations, user, onAddDef, onEditDef, onDeleteDef, onComplete, onUndo }) {
   const [form, setForm] = useState(null);
   const [roomFilter, setRoomFilter] = useState('all');
   const completionByDef = useMemo(() => {
@@ -115,7 +126,7 @@ export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDe
       <p className="text-xs text-zinc-500 mt-0.5">Immer da. Erledigen, wenn es gemacht wurde.</p>
     </div><AccentButton small disabled={!rooms.length} onClick={() => setForm('new')}><Plus size={14} /> Aufgabe</AccentButton></div>
 
-    <HouseholdStatus tasks={allHouseholdTasks} completionByDef={completionByDef} />
+    <HouseholdStatus tasks={allHouseholdTasks} rooms={rooms} completionByDef={completionByDef} vacations={vacations} />
 
     {rooms.length > 1 && <div className="flex gap-2 overflow-x-auto pb-1 mb-5">
       <GhostButton small onClick={() => setRoomFilter('all')}>Alle Räume</GhostButton>
@@ -128,7 +139,8 @@ export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDe
         <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">{room.name}</div>
         <div className="grid gap-2 md:grid-cols-2">{tasks.map(def => {
           const last = completionByDef[def.id];
-          const status = taskStatus(def, last);
+          const age = taskAge(def, last, vacations);
+          const status = taskStatus(def, last, vacations);
           const statusStyle = {
             green: { borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.07)' },
             yellow: { borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.07)' },
@@ -139,7 +151,7 @@ export function TasksView({ taskDefs, instances, rooms, user, onAddDef, onEditDe
           return <div key={def.id} className="rounded-xl border bg-zinc-900 p-4" style={statusStyle}>
             <div className="flex items-start justify-between gap-3"><div className="min-w-0">
               <div className="font-medium text-sm text-zinc-50 flex items-center gap-2">{def.title}<span className={`text-[10px] uppercase tracking-wide ${statusClass}`}>{statusText}</span></div>
-              <div className={`text-xs mt-1 ${statusClass}`}><History size={11} className="inline mr-1" />{ageLabel(last?.completedAt)}</div>
+              <div className={`text-xs mt-1 ${statusClass}`}><History size={11} className="inline mr-1" />{ageLabel(last?.completedAt, age)}</div>
               {last && <div className="text-[11px] text-zinc-600 mt-0.5">von {last.completedBy} · {formatDateTime(last.completedAt)}</div>}
             </div><AccentButton small onClick={() => onComplete(def, user.name)}><Check size={14} /> Erledigt</AccentButton></div>
             <div className="flex items-center gap-3 mt-3 pt-2.5 border-t border-zinc-800">

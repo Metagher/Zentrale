@@ -13,7 +13,7 @@ export function CalendarView({ instances, rooms, user, onlyMine, setOnlyMine, on
   const [selectedDate, setSelectedDate] = useState(todayISO());
 
   const roomsById = useMemo(() => Object.fromEntries(rooms.map(r => [r.id, r])), [rooms]);
-  const filteredInstances = instances.filter(i => !onlyMine || i.assignedTo === user.name);
+  const filteredInstances = instances.filter(i => i.kind === 'oneTime' && i.dueDate && (!onlyMine || i.assignedTo === user.name));
 
   const firstOfMonth = new Date(monthCursor.y, monthCursor.m, 1);
   const startOffset = (firstOfMonth.getDay() + 6) % 7; // Mo=0

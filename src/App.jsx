@@ -7,15 +7,14 @@ import { addDays, formatDate, todayISO } from './lib/dateUtils.js';
 import { extendRecurringInstances, generateInstancesForDef, makeInstance, rollWindowFor, uid } from './lib/recurrence.js';
 import { loadKey, saveKey } from './lib/storage.js';
 import { guard } from './lib/guard.js';
-import { DRYER_TASK_DEF_ID, DRYER_TASK_TITLE_DEFAULT, LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey, resolveDryerTaskRoomId } from './lib/laundry.js';
-import { suppressVacationInstances } from './lib/vacation.js';
+import { LAUNDRY_DEFAULT, LAUNDRY_STATES, monthKey } from './lib/laundry.js';
 import { cleanData, inspectData } from './lib/dataValidation.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Login } from './components/Login.jsx';
 import { AccentButton, Field, GhostButton, Modal, Toast, inputCls } from './components/ui.jsx';
-import { OverviewView } from './views/OverviewView.jsx';
 import { CalendarView } from './views/CalendarView.jsx';
 import { TasksView } from './views/TasksView.jsx';
+import { OneTimeTasksView } from './views/OneTimeTasksView.jsx';
 import { ReportsView } from './views/ReportsView.jsx';
 import { LaundryView } from './views/LaundryView.jsx';
 import { ShoppingView } from './views/ShoppingView.jsx';
@@ -127,9 +126,9 @@ function AppInner() {
     const v = await loadKey(supabase, 'vacations', []);
 
     const today = todayISO();
-    i = i.map(inst => (!inst.completed && inst.dueDate < today) ? { ...inst, dueDate: today } : inst);
+    i = i.map(inst => (!inst.completed && inst.dueDate && inst.dueDate < today && inst.kind !== 'oneTime') ? { ...inst, dueDate: today } : inst);
     const ext = extendRecurringInstances(d, i, today, v);
-    const cleanedInstances = suppressVacationInstances(ext.instances, v);
+    const cleanedInstances = ext.instances;
 
     // Neue Kommentare der jeweils anderen Person kurz als Toast anzeigen.
     // Nur relevant, wenn schon eingeloggt - der allererste Load (vor dem Login)
@@ -157,7 +156,6 @@ function AppInner() {
     l = {
       waschmaschine: { ...LAUNDRY_DEFAULT, ...(l.waschmaschine || {}), counts: { ...(l.waschmaschine?.counts || {}) } },
       trockner: { ...LAUNDRY_DEFAULT, ...(l.trockner || {}), counts: { ...(l.trockner?.counts || {}) } },
-      dryerTask: l.dryerTask || { title: DRYER_TASK_TITLE_DEFAULT, roomId: '' },
     };
 
     const s = await loadKey(supabase, 'shopping', []);
@@ -200,18 +198,6 @@ function AppInner() {
       [machine]: { status: nextStatus, changedBy: user.name, changedAt: new Date().toISOString(), counts },
     };
     persistLaundry(next);
-    if (machine === 'trockner' && nextStatus === 'FERTIG' && laundry.dryerTask?.title) {
-      const roomId = resolveDryerTaskRoomId(laundry.dryerTask, rooms);
-      if (roomId) {
-        const dryerDef = { id: DRYER_TASK_DEF_ID, title: laundry.dryerTask.title, roomId };
-        persistInstances([...instances, makeInstance(dryerDef, todayISO())]);
-        const roomName = rooms.find(r => r.id === roomId)?.name;
-        setToast(`Automatische Aufgabe erstellt: „${laundry.dryerTask.title}“${roomName ? ` (${roomName})` : ''}`);
-      }
-    }
-  }
-  function saveDryerTask(data) {
-    persistLaundry({ ...laundry, dryerTask: { title: data.title.trim(), roomId: data.roomId } });
   }
   function adjustLaundryCount(machine, delta) {
     const current = laundry[machine] || LAUNDRY_DEFAULT;
@@ -229,8 +215,6 @@ function AppInner() {
   function addVacation({ start, end }) {
     const next = [...vacations, { id: uid(), start, end }];
     persistVacations(next);
-    const cleaned = suppressVacationInstances(instances, next);
-    if (cleaned.length !== instances.length) persistInstances(cleaned);
   }
   function deleteVacation(id) {
     persistVacations(vacations.filter(v => v.id !== id));
@@ -366,11 +350,18 @@ function AppInner() {
     setToast('Korrupte Daten wurden bereinigt');
   }
 
-  function quickAdd(title, roomId, dueDate) {
-    const def = { id: uid(), title, roomId, recurType: 'once', startDate: dueDate, generatedThrough: dueDate };
-    persistDefs([...taskDefs, def]);
-    persistInstances([...instances, makeInstance(def, dueDate)]);
+  function quickAdd(title, roomId, dueDate, assignedTo) {
+    persistInstances([...instances, {
+      id: uid(), kind: 'oneTime', defId: null, title, roomId: roomId || '', dueDate: dueDate || '',
+      assignedTo: assignedTo || null, completed: false, completedAt: null, completedBy: null, comments: [], createdAt: new Date().toISOString(),
+    }]);
     setQuickAddDate(null);
+  }
+  function addOneTimeTask(data) {
+    persistInstances([...instances, {
+      id: uid(), kind: 'oneTime', defId: null, title: data.title, roomId: data.roomId || '', dueDate: data.dueDate || '',
+      assignedTo: data.assignedTo || null, completed: false, completedAt: null, completedBy: null, comments: [], createdAt: new Date().toISOString(),
+    }]);
   }
 
   if (!config || !supabase) {
@@ -437,17 +428,16 @@ function AppInner() {
         </nav>
 
         <main className="flex-1 px-4 md:px-8 py-6 pb-24 md:pb-10 min-w-0">
-          {view === 'overview' && (
-            <OverviewView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
-              onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate}
-              />
+          {view === 'oneTime' && (
+            <OneTimeTasksView instances={instances} rooms={rooms} user={user}
+              onAdd={guard(addOneTimeTask, 'Aufgabe anlegen')} onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} />
           )}
           {view === 'calendar' && (
             <CalendarView instances={instances} rooms={rooms} user={user} onlyMine={onlyMine} setOnlyMine={setOnlyMine}
               onUpdate={guard(updateInstance, 'Aufgabe speichern')} onDelete={guard(deleteInstance, 'Aufgabe löschen')} onQuickAdd={setQuickAddDate} />
           )}
           {view === 'tasks' && (
-            <TasksView taskDefs={taskDefs} instances={instances} rooms={rooms} user={user}
+            <TasksView taskDefs={taskDefs} instances={instances} rooms={rooms} vacations={vacations} user={user}
               onAddDef={guard(addTaskDef, 'Aufgabe anlegen')} onEditDef={guard(editTaskDef, 'Aufgabe speichern')} onDeleteDef={guard(deleteTaskDef, 'Aufgabe löschen')}
               onComplete={guard(completeHouseholdTask, 'Aufgabe erledigen')} onUndo={guard(undoHouseholdCompletion, 'Erledigung zurücknehmen')} />
           )}
@@ -468,7 +458,6 @@ function AppInner() {
           {view === 'settings' && (
             <SettingsView rooms={rooms} instances={instances} onSaveRooms={guard(persistRooms, 'Raum speichern')}
               vacations={vacations} onAddVacation={guard(addVacation, 'Urlaub hinzufügen')} onDeleteVacation={guard(deleteVacation, 'Urlaub löschen')}
-              dryerTask={laundry.dryerTask} onSaveDryerTask={guard(saveDryerTask, 'Automatische Aufgabe speichern')}
               dataIssues={dataIssues} onCleanupData={guard(cleanupCorruptData, 'Daten bereinigen')} />
           )}
         </main>
@@ -501,7 +490,8 @@ function AppInner() {
 
 function QuickAddModal({ date, rooms, onCancel, onSave }) {
   const [title, setTitle] = useState('');
-  const [roomId, setRoomId] = useState(rooms[0]?.id || '');
+  const [roomId, setRoomId] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
   return (
     <Modal title={`Aufgabe am ${formatDate(date)}`} onClose={onCancel}>
       <Field label="Titel">
@@ -509,12 +499,19 @@ function QuickAddModal({ date, rooms, onCancel, onSave }) {
       </Field>
       <Field label="Raum">
         <select className={inputCls} value={roomId} onChange={e => setRoomId(e.target.value)}>
+          <option value="">Kein Raum</option>
           {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Person (optional)">
+        <select className={inputCls} value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
+          <option value="">Noch nicht zuweisen</option>
+          {Object.values(USERS).map(person => <option key={person.name} value={person.name}>{person.name}</option>)}
         </select>
       </Field>
       <div className="flex gap-2 justify-end mt-2">
         <GhostButton onClick={onCancel}>Abbrechen</GhostButton>
-        <AccentButton disabled={!title.trim() || !roomId} onClick={() => onSave(title.trim(), roomId, date)}>Speichern</AccentButton>
+        <AccentButton disabled={!title.trim()} onClick={() => onSave(title.trim(), roomId, date, assignedTo)}>Speichern</AccentButton>
       </div>
     </Modal>
   );
